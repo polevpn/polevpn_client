@@ -4,8 +4,27 @@ import (
 	"errors"
 	"net"
 	"os"
+	"runtime/debug"
 	"strings"
+
+	"github.com/polevpn/elog"
 )
+
+func PanicHandler() {
+	if err := recover(); err != nil {
+		elog.Error("Panic Exception:", err)
+		elog.Error(string(debug.Stack()))
+	}
+}
+
+func PanicHandlerExit() {
+	if err := recover(); err != nil {
+		elog.Error("Panic Exception:", err)
+		elog.Error(string(debug.Stack()))
+		elog.Error("************Program Exit************")
+		os.Exit(0)
+	}
+}
 
 func GetLocalIp() (string, error) {
 
