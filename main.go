@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"runtime"
 	"time"
 
 	"github.com/polevpn/elog"
@@ -12,8 +13,7 @@ func init() {
 }
 
 func main() {
-	var forwardcidr string
-	flag.StringVar(&forwardcidr, "forwardip", "8.8.8.8", "forward ip")
+
 	flag.Parse()
 	defer elog.Flush()
 
@@ -27,11 +27,18 @@ func main() {
 		elog.Fatal("new polevpn client fail", err)
 	}
 
-	err = client.Start(endpoint, user, pwd, forwardcidr)
+	err = client.Start(endpoint, user, pwd)
 
 	if err != nil {
 		elog.Fatal("start polevpn client fail", err)
 	}
+
+	for range time.NewTicker(time.Second * 5).C {
+		m := runtime.MemStats{}
+		runtime.ReadMemStats(&m)
+		elog.Printf("mem=%v,go=%v", m.HeapAlloc, runtime.NumGoroutine())
+	}
+
 	time.Sleep(time.Hour)
 
 }

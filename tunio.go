@@ -3,15 +3,24 @@ package main
 import (
 	"errors"
 	"io"
+	"net"
 	"os/exec"
 
 	"github.com/polevpn/elog"
+	"github.com/polevpn/geoip"
 	"github.com/polevpn/netstack/tcpip/header"
 	"github.com/polevpn/netstack/tcpip/transport/icmp"
 	"github.com/polevpn/netstack/tcpip/transport/tcp"
 	"github.com/polevpn/netstack/tcpip/transport/udp"
 	"github.com/songgao/water"
 	"golang.org/x/net/dns/dnsmessage"
+)
+
+const (
+	IP4_HEADER_LEN = 20
+	TCP_HEADER_LEN = 20
+	UDP_HEADER_LEN = 8
+	UDP_DNS_PORT   = 53
 )
 
 type TunIO struct {
@@ -112,25 +121,38 @@ func (t *TunIO) dispatch(pkt []byte) {
 
 	var err error
 	ipv4pkg := header.IPv4(pkt)
+	direct := false
 	if ipv4pkg.Protocol() == uint8(icmp.ProtocolNumber4) {
-		icmppkg := header.ICMPv4(pkt[20:])
-		elog.Info("icmp packet", icmppkg.Sequence())
+		if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
+			//elog.Printf("ICMP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
+			direct = true
+		}
 	} else if ipv4pkg.Protocol() == uint8(tcp.ProtocolNumber) {
-		tcppkg := header.TCP(pkt[20:])
-		elog.Info("tcp packet", tcppkg.SourcePort(), tcppkg.DestinationPort())
+		if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
+			//elog.Printf("TCP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
+			direct = true
+		}
 	} else if ipv4pkg.Protocol() == uint8(udp.ProtocolNumber) {
-		udppkg := header.UDP(pkt[20:])
-		elog.Info("udp packet", udppkg.SourcePort(), udppkg.DestinationPort())
-
-		if udppkg.DestinationPort() == 53 {
+		udppkg := header.UDP(pkt[IP4_HEADER_LEN:])
+		if udppkg.DestinationPort() == UDP_DNS_PORT {
 			var msg dnsmessage.Message
-			err = msg.Unpack(pkt[28:])
+			err = msg.Unpack(pkt[IP4_HEADER_LEN+UDP_HEADER_LEN:])
 			if err != nil {
 				elog.Error("parser dns packet fail", err)
 			} else {
 				for i := 0; i < len(msg.Questions); i++ {
-					elog.Info(msg.Questions[i].Name.String(), msg.Questions[i].Type)
+					name := msg.Questions[i].Name.String()
+					name = name[:len(name)-1]
+					if geoip.IsDirectDomainRecursive(name) {
+						elog.Printf("DNS CN DOMAIN %v", name)
+						direct = true
+					}
 				}
+			}
+		} else {
+			if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
+				elog.Printf("UDP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
+				direct = true
 			}
 		}
 
@@ -139,18 +161,35 @@ func (t *TunIO) dispatch(pkt []byte) {
 		return
 	}
 
-	if t.wsconn == nil {
-		elog.Error("wsconn is nil")
-		return
+	if direct {
+		//elog.Info("to local forwarder")
+		t.sendIPPacketToLocalForwarder(pkt)
+	} else {
+		//elog.Info("to remote forwarder")
+		t.sendIPPacketToRemoteWSConn(pkt)
 	}
 
-	t.forwarder.Write(pkt)
+}
 
-	// buf := make([]byte, POLE_PACKET_HEADER_LEN+len(pkt))
-	// copy(buf[POLE_PACKET_HEADER_LEN:], pkt)
-	// polepkt := PolePacket(buf)
-	// polepkt.SetCmd(CMD_C2S_IPDATA)
-	// t.wsconn.Send(polepkt)
+func (t *TunIO) sendIPPacketToLocalForwarder(pkt []byte) {
+	if t.forwarder != nil {
+		t.forwarder.Write(pkt)
+	} else {
+		elog.Error("local forwarder haven't set")
+	}
+}
+
+func (t *TunIO) sendIPPacketToRemoteWSConn(pkt []byte) {
+
+	if t.wsconn != nil {
+		buf := make([]byte, POLE_PACKET_HEADER_LEN+len(pkt))
+		copy(buf[POLE_PACKET_HEADER_LEN:], pkt)
+		polepkt := PolePacket(buf)
+		polepkt.SetCmd(CMD_C2S_IPDATA)
+		t.wsconn.Send(polepkt)
+	} else {
+		elog.Error("remote ws conn haven't set")
+	}
 
 }
 

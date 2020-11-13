@@ -18,7 +18,7 @@ const (
 )
 
 const (
-	CH_TUN_DEVICE_WRITE_SIZE     = 256
+	CH_TUN_DEVICE_WRITE_SIZE     = 2048
 	HEART_BEAT_INTERVAL          = 10
 	WEBSOCKET_RECONNECT_TIMES    = 12
 	WEBSOCKET_RECONNECT_INTERVAL = 10
@@ -34,7 +34,6 @@ type PoleVpnClient struct {
 	endpoint          string
 	user              string
 	pwd               string
-	forwardcidr       string
 	allocip           string
 	lasttimeHeartbeat time.Time
 	reconnecting      bool
@@ -65,7 +64,7 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 	return client, nil
 }
 
-func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, forwardcidr string) error {
+func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
@@ -77,7 +76,6 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, forward
 	pc.endpoint = endpoint
 	pc.user = user
 	pc.pwd = pwd
-	pc.forwardcidr = forwardcidr
 
 	var err error
 
@@ -143,8 +141,68 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 		return
 	}
 
-	elog.Infof("set route %v to %v", pc.forwardcidr, ip2)
-	err = pc.tunio.AddRoute(pc.forwardcidr, ip2)
+	// err = pc.tunio.AddRoute("39.156.69.79/32", ip2)
+	// if err != nil {
+	// 	elog.Error("add route fail", err)
+	// 	pc.Stop()
+	// 	return
+	// }
+
+	// err = pc.tunio.AddRoute("45.113.192.102/32", ip2)
+	// if err != nil {
+	// 	elog.Error("add route fail", err)
+	// 	pc.Stop()
+	// 	return
+	// }
+
+	err = pc.tunio.AddRoute("1/8", ip2)
+	if err != nil {
+		elog.Error("add route fail", err)
+		pc.Stop()
+		return
+	}
+
+	err = pc.tunio.AddRoute("2/7", ip2)
+	if err != nil {
+		elog.Error("add route fail", err)
+		pc.Stop()
+		return
+	}
+
+	err = pc.tunio.AddRoute("4/6", ip2)
+	if err != nil {
+		elog.Error("add route fail", err)
+		pc.Stop()
+		return
+	}
+
+	err = pc.tunio.AddRoute("8/5", ip2)
+	if err != nil {
+		elog.Error("add route fail", err)
+		pc.Stop()
+		return
+	}
+
+	err = pc.tunio.AddRoute("16/4", ip2)
+	if err != nil {
+		elog.Error("add route fail", err)
+		pc.Stop()
+		return
+	}
+
+	err = pc.tunio.AddRoute("32/3", ip2)
+	if err != nil {
+		elog.Error("add route fail", err)
+		pc.Stop()
+		return
+	}
+	err = pc.tunio.AddRoute("64/2", ip2)
+	if err != nil {
+		elog.Error("add route fail", err)
+		pc.Stop()
+		return
+	}
+	err = pc.tunio.AddRoute("128.0/1", ip2)
 	if err != nil {
 		elog.Error("add route fail", err)
 		pc.Stop()
@@ -208,7 +266,7 @@ func (pc *PoleVpnClient) HeartBeat() {
 
 	timer := time.NewTicker(time.Second * time.Duration(HEART_BEAT_INTERVAL))
 
-	for _ = range timer.C {
+	for range timer.C {
 		if pc.state == POLE_CLIENT_CLOSED {
 			timer.Stop()
 			break

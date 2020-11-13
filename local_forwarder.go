@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -20,10 +21,12 @@ import (
 )
 
 const (
-	FORWARD_UDP_TIMEOUT      = 10
-	FORWARD_CH_WRITE_SIZE    = 256
+	TCP_MAX_CONNECTION_SIZE  = 1024
+	FORWARD_CH_WRITE_SIZE    = 2048
 	UDP_MAX_BUFFER_SIZE      = 8192
-	UDP_CONNECTION_IDLE_TIME = 2
+	TCP_MAX_BUFFER_SIZE      = 8192
+	UDP_CONNECTION_IDLE_TIME = 1
+	CH_WRITE_SIZE            = 1024
 )
 
 type LocalForwarder struct {
@@ -86,7 +89,7 @@ func NewLocalForwarder() (*LocalForwarder, error) {
 
 	s.SetTransportProtocolHandler(udp.ProtocolNumber, uf.HandlePacket)
 
-	tf := tcp.NewForwarder(s, 0, 10, func(r *tcp.ForwarderRequest) {
+	tf := tcp.NewForwarder(s, 0, TCP_MAX_CONNECTION_SIZE, func(r *tcp.ForwarderRequest) {
 		go forwarder.forwardTCP(r)
 	})
 
@@ -137,12 +140,17 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 	ep, err := r.CreateEndpoint(lf.wq)
 	if err != nil {
 		elog.Error("create tcp endpint error", err)
+		r.Complete(true)
 		return
 	}
+
+	elog.Println(r.ID(), "connect")
 
 	localip, err1 := GetLocalIp()
 	if err1 != nil {
 		elog.Error("get local ip fail", err1)
+		ep.Close()
+		r.Complete(true)
 		return
 	}
 
@@ -154,21 +162,46 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 	if err1 != nil {
 		log.Println("conn dial error ", err1)
 		ep.Close()
+		r.Complete(true)
 		return
 	}
-	go lf.tcpRead(lf.wq, ep, conn)
-	go lf.tcpWrite(lf.wq, ep, conn)
+	go lf.tcpRead(r, lf.wq, ep, conn)
+	go lf.tcpWrite(r, lf.wq, ep, conn)
 }
 
 func (lf *LocalForwarder) udpRead(ep tcpip.Endpoint, conn *net.UDPConn, timer *time.Ticker) {
 
-	defer ep.Close()
-	defer conn.Close()
+	defer func() {
+		ep.Close()
+		conn.Close()
+	}()
 
 	waitEntry, notifyCh := waiter.NewChannelEntry(nil)
 
 	lf.wq.EventRegister(&waitEntry, waiter.EventIn)
 	defer lf.wq.EventUnregister(&waitEntry)
+
+	wch := make(chan []byte, CH_WRITE_SIZE)
+
+	defer close(wch)
+
+	writer := func() {
+		for {
+			pkt, ok := <-wch
+			if !ok {
+				elog.Info("udp wch closed,exit write process")
+				return
+			} else {
+				_, err1 := conn.Write(pkt)
+				if err1 != nil {
+					elog.Error("conn write error", err1)
+					return
+				}
+			}
+		}
+	}
+
+	go writer()
 
 	lastTime := time.Now()
 
@@ -190,33 +223,32 @@ func (lf *LocalForwarder) udpRead(ep tcpip.Endpoint, conn *net.UDPConn, timer *t
 						continue
 					}
 				}
-
+			} else if err != tcpip.ErrClosedForReceive && err != tcpip.ErrClosedForSend {
+				elog.Error("read from udp endpoint fail", err)
 			}
-			elog.Error("read from udp endpoint fail", err)
 			return
 		}
 
-		_, err1 := conn.Write(v)
-
-		if err1 != nil {
-			elog.Error("udp conn writeto error ", err1)
-			return
-		}
+		wch <- v
 		lastTime = time.Now()
 	}
 }
 
 func (lf *LocalForwarder) udpWrite(ep tcpip.Endpoint, conn *net.UDPConn, addr *tcpip.FullAddress) {
 
-	defer ep.Close()
-	defer conn.Close()
+	defer func() {
+		ep.Close()
+		conn.Close()
+	}()
 
 	for {
 		var udppkg []byte = make([]byte, UDP_MAX_BUFFER_SIZE)
 		n, err1 := conn.Read(udppkg)
 
 		if err1 != nil {
-			elog.Error("udp conn readfrom error ", err1)
+			if err1 != io.EOF {
+				elog.Error("udp conn readfrom error ", err1)
+			}
 			return
 		}
 		udppkg1 := udppkg[:n]
@@ -259,14 +291,41 @@ func (lf *LocalForwarder) forwardUDP(r *udp.ForwarderRequest) {
 	go lf.udpWrite(ep, conn, addr)
 }
 
-func (lf *LocalForwarder) tcpRead(wq *waiter.Queue, ep tcpip.Endpoint, conn net.Conn) {
-	defer ep.Close()
-	defer conn.Close()
+func (lf *LocalForwarder) tcpRead(r *tcp.ForwarderRequest, wq *waiter.Queue, ep tcpip.Endpoint, conn net.Conn) {
+	defer func() {
+		elog.Println(r.ID(), "closed")
+		ep.Close()
+		conn.Close()
+		r.Complete(true)
+	}()
+
 	// Create wait queue entry that notifies a channel.
 	waitEntry, notifyCh := waiter.NewChannelEntry(nil)
 
 	wq.EventRegister(&waitEntry, waiter.EventIn)
 	defer wq.EventUnregister(&waitEntry)
+
+	wch := make(chan []byte, CH_WRITE_SIZE)
+
+	defer close(wch)
+
+	writer := func() {
+		for {
+			pkt, ok := <-wch
+			if !ok {
+				elog.Info("wch closed,exit write process")
+				return
+			} else {
+				_, err1 := conn.Write(pkt)
+				if err1 != nil {
+					elog.Error("conn write error", err1)
+					return
+				}
+			}
+		}
+	}
+
+	go writer()
 
 	for {
 		v, _, err := ep.Read(nil)
@@ -274,26 +333,28 @@ func (lf *LocalForwarder) tcpRead(wq *waiter.Queue, ep tcpip.Endpoint, conn net.
 			if err == tcpip.ErrWouldBlock {
 				<-notifyCh
 				continue
+			} else if err != tcpip.ErrClosedForReceive && err != tcpip.ErrClosedForSend {
+				elog.Error("endpoint read fail", err)
 			}
-			elog.Error("endpoint read fail", err)
 			return
 		}
-		_, err1 := conn.Write(v)
-		if err1 != nil {
-			elog.Error("conn write error", err1)
-			return
-		}
+		wch <- v
 	}
 }
 
-func (lf *LocalForwarder) tcpWrite(wq *waiter.Queue, ep tcpip.Endpoint, conn net.Conn) {
-	defer ep.Close()
-	defer conn.Close()
+func (lf *LocalForwarder) tcpWrite(r *tcp.ForwarderRequest, wq *waiter.Queue, ep tcpip.Endpoint, conn net.Conn) {
+	defer func() {
+		ep.Close()
+		conn.Close()
+	}()
+
 	for {
-		var buf []byte = make([]byte, 4096)
+		var buf []byte = make([]byte, TCP_MAX_BUFFER_SIZE)
 		n, err := conn.Read(buf)
 		if err != nil {
-			elog.Error("conn read error", err)
+			if err != io.EOF {
+				elog.Error("conn read error", err)
+			}
 			break
 		}
 

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	CH_WEBSOCKET_WRITE_SIZE = 100
+	CH_WEBSOCKET_WRITE_SIZE = 2048
 )
 
 type WebSocketConn struct {
