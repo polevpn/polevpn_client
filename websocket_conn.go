@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/tls"
 	"io"
 	"net"
+	"net/url"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -31,16 +33,23 @@ func NewWebSocketConn() *WebSocketConn {
 	}
 }
 
-func (wsc *WebSocketConn) Connect(url string, user string, pwd string) error {
+func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, sni string) error {
 
 	localip, err := GetLocalIp()
 	if err != nil {
 		return err
 	}
-	d := websocket.Dialer{
-		NetDialContext: (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
+
+	tlsconfig := &tls.Config{
+		ServerName:         sni,
+		InsecureSkipVerify: true,
 	}
-	conn, _, err := d.Dial(url+"?user="+user+"&pwd="+pwd, nil)
+
+	d := websocket.Dialer{
+		NetDialContext:  (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
+		TLSClientConfig: tlsconfig,
+	}
+	conn, _, err := d.Dial(endpoint+"?user="+url.QueryEscape(user)+"&pwd="+url.QueryEscape(pwd), nil)
 
 	if err != nil {
 		return err
@@ -55,17 +64,24 @@ func (wsc *WebSocketConn) Connect(url string, user string, pwd string) error {
 	return nil
 }
 
-func (wsc *WebSocketConn) ReConnect(url string, user string, pwd string, ip string) error {
+func (wsc *WebSocketConn) ReConnect(endpoint string, user string, pwd string, ip string, sni string) error {
 
 	localip, err := GetLocalIp()
 	if err != nil {
 		return err
 	}
-	d := websocket.Dialer{
-		NetDialContext: (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
+
+	tlsconfig := &tls.Config{
+		ServerName:         sni,
+		InsecureSkipVerify: true,
 	}
 
-	conn, _, err := d.Dial(url+"?user="+user+"&pwd="+pwd+"&ip="+ip, nil)
+	d := websocket.Dialer{
+		NetDialContext:  (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
+		TLSClientConfig: tlsconfig,
+	}
+
+	conn, _, err := d.Dial(endpoint+"?user="+url.QueryEscape(user)+"&pwd="+url.QueryEscape(pwd)+"&ip="+ip, nil)
 
 	if err != nil {
 		return err
@@ -102,7 +118,7 @@ func (wsc *WebSocketConn) Close(flag bool) error {
 }
 
 func (wsc *WebSocketConn) String() string {
-	return wsc.conn.LocalAddr().String() + "-" + wsc.conn.RemoteAddr().String()
+	return wsc.conn.LocalAddr().String() + "->" + wsc.conn.RemoteAddr().String()
 }
 
 func (wsc *WebSocketConn) IsClosed() bool {
@@ -127,9 +143,9 @@ func (wsc *WebSocketConn) read() {
 		mtype, pkt, err := wsc.conn.ReadMessage()
 		if err != nil {
 			if err == io.EOF {
-				elog.Info(wsc.conn.LocalAddr().String(), wsc.conn.RemoteAddr().String(), "conn closed")
+				elog.Info(wsc.String(), "conn closed")
 			} else {
-				elog.Error(wsc.conn.LocalAddr().String(), wsc.conn.RemoteAddr().String(), "conn read exception:", err)
+				elog.Error(wsc.String(), "conn read exception:", err)
 			}
 			return
 		}
@@ -170,10 +186,10 @@ func (wsc *WebSocketConn) write() {
 				}
 				err := wsc.conn.WriteMessage(websocket.BinaryMessage, pkt)
 				if err != nil {
-					if err == io.EOF {
-						elog.Info(wsc.conn.LocalAddr().String(), wsc.conn.RemoteAddr().String(), "conn closed")
+					if err == io.EOF || err == io.ErrUnexpectedEOF {
+						elog.Info(wsc.String(), "conn closed")
 					} else {
-						elog.Error(wsc.conn.LocalAddr().String(), wsc.conn.RemoteAddr().String(), "conn write exception:", err)
+						elog.Error(wsc.String(), "conn write exception:", err)
 					}
 					return
 				}
@@ -184,7 +200,7 @@ func (wsc *WebSocketConn) write() {
 
 func (wsc *WebSocketConn) Send(pkt []byte) {
 	if wsc.IsClosed() == true {
-		elog.Info("websocket connection is closed,can't send pkt")
+		elog.Debug("websocket connection is closed,can't send pkt")
 		return
 	}
 	if wsc.wch != nil {

@@ -20,7 +20,7 @@ const (
 	IP4_HEADER_LEN = 20
 	TCP_HEADER_LEN = 20
 	UDP_HEADER_LEN = 8
-	UDP_DNS_PORT   = 53
+	DNS_PORT       = 53
 )
 
 type TunIO struct {
@@ -30,9 +30,10 @@ type TunIO struct {
 	wsconn    *WebSocketConn
 	forwarder *LocalForwarder
 	closed    bool
+	mode      bool
 }
 
-func NewTunIO(size int) (*TunIO, error) {
+func NewTunIO(size int, mode bool) (*TunIO, error) {
 
 	config := water.Config{
 		DeviceType: water.TUN,
@@ -42,7 +43,12 @@ func NewTunIO(size int) (*TunIO, error) {
 		return nil, err
 	}
 
-	return &TunIO{ifce: ifce, wch: make(chan []byte, size), mtu: 1500, closed: false}, nil
+	return &TunIO{
+		ifce:   ifce,
+		wch:    make(chan []byte, size),
+		mtu:    1500,
+		closed: false,
+		mode:   mode}, nil
 }
 
 func (t *TunIO) SetWebSocketConn(wsconn *WebSocketConn) {
@@ -128,13 +134,18 @@ func (t *TunIO) dispatch(pkt []byte) {
 			direct = true
 		}
 	} else if ipv4pkg.Protocol() == uint8(tcp.ProtocolNumber) {
+		tcppkg := header.TCP(pkt[IP4_HEADER_LEN:])
+		if tcppkg.DestinationPort() == DNS_PORT {
+			elog.Info("tcp dns request")
+		}
+
 		if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
 			//elog.Printf("TCP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
 			direct = true
 		}
 	} else if ipv4pkg.Protocol() == uint8(udp.ProtocolNumber) {
 		udppkg := header.UDP(pkt[IP4_HEADER_LEN:])
-		if udppkg.DestinationPort() == UDP_DNS_PORT {
+		if udppkg.DestinationPort() == DNS_PORT {
 			var msg dnsmessage.Message
 			err = msg.Unpack(pkt[IP4_HEADER_LEN+UDP_HEADER_LEN:])
 			if err != nil {
@@ -151,7 +162,7 @@ func (t *TunIO) dispatch(pkt []byte) {
 			}
 		} else {
 			if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
-				elog.Printf("UDP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
+				//elog.Printf("UDP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
 				direct = true
 			}
 		}
@@ -159,6 +170,10 @@ func (t *TunIO) dispatch(pkt []byte) {
 	} else {
 		elog.Info("unknown packet")
 		return
+	}
+
+	if mode {
+		direct = false
 	}
 
 	if direct {

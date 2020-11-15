@@ -34,16 +34,19 @@ type PoleVpnClient struct {
 	endpoint          string
 	user              string
 	pwd               string
+	sni               string
 	allocip           string
 	lasttimeHeartbeat time.Time
 	reconnecting      bool
+	wg                *sync.WaitGroup
+	mode              bool
 }
 
-func NewPoleVpnClient() (*PoleVpnClient, error) {
+func NewPoleVpnClient(mode bool) (*PoleVpnClient, error) {
 
 	var err error
 
-	tunio, err := NewTunIO(CH_TUN_DEVICE_WRITE_SIZE)
+	tunio, err := NewTunIO(CH_TUN_DEVICE_WRITE_SIZE, mode)
 
 	if err != nil {
 		elog.Fatal("create tun fail", err)
@@ -59,12 +62,20 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 		return nil, err
 	}
 
-	client := &PoleVpnClient{tunio: tunio, wsconn: wsconn, forwarder: forwarder, state: POLE_CLIENT_INIT, mutex: &sync.Mutex{}}
+	client := &PoleVpnClient{
+		tunio:     tunio,
+		wsconn:    wsconn,
+		forwarder: forwarder,
+		state:     POLE_CLIENT_INIT,
+		mutex:     &sync.Mutex{},
+		wg:        &sync.WaitGroup{},
+		mode:      mode,
+	}
 
 	return client, nil
 }
 
-func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
+func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni string) error {
 
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
@@ -76,14 +87,19 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 	pc.endpoint = endpoint
 	pc.user = user
 	pc.pwd = pwd
+	pc.sni = sni
 
 	var err error
 
-	err = pc.wsconn.Connect(endpoint, user, pwd)
+	elog.Infof("connect to %v", endpoint)
+
+	err = pc.wsconn.Connect(endpoint, user, pwd, sni)
 	if err != nil {
-		elog.Fatal("websocket connect fail", err)
+		elog.Error("websocket connect fail", err)
 		return err
 	}
+
+	elog.Info("connect ok")
 
 	pc.wsconn.SetHandler(CMD_ALLOC_IPADDR, pc.handlerAllocAdressRespose)
 
@@ -103,7 +119,12 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 	pc.lasttimeHeartbeat = time.Now()
 	go pc.HeartBeat()
 	pc.state = POLE_CLIENT_RUNING
+	pc.wg.Add(1)
 	return nil
+}
+
+func (pc *PoleVpnClient) WaitStop() {
+	pc.wg.Wait()
 }
 
 func (pc *PoleVpnClient) AskAllocIPAddress() {
@@ -140,20 +161,6 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 		pc.Stop()
 		return
 	}
-
-	// err = pc.tunio.AddRoute("39.156.69.79/32", ip2)
-	// if err != nil {
-	// 	elog.Error("add route fail", err)
-	// 	pc.Stop()
-	// 	return
-	// }
-
-	// err = pc.tunio.AddRoute("45.113.192.102/32", ip2)
-	// if err != nil {
-	// 	elog.Error("add route fail", err)
-	// 	pc.Stop()
-	// 	return
-	// }
 
 	err = pc.tunio.AddRoute("1/8", ip2)
 	if err != nil {
@@ -241,7 +248,7 @@ func (pc *PoleVpnClient) reconnect() {
 	for i := 0; i < WEBSOCKET_RECONNECT_TIMES; i++ {
 
 		elog.Info("reconnecting")
-		err := pc.wsconn.ReConnect(pc.endpoint, pc.user, pc.pwd, pc.allocip)
+		err := pc.wsconn.ReConnect(pc.endpoint, pc.user, pc.pwd, pc.allocip, pc.sni)
 		if err != nil {
 			elog.Error("reconnect fail", err)
 			elog.Error("reconnect 10 seconds later")
@@ -295,11 +302,12 @@ func (pc *PoleVpnClient) Stop() {
 		return
 	}
 
-	elog.Error("client closing")
+	elog.Error("polevpn client closing")
 	pc.tunio.Close()
 	pc.wsconn.Close(false)
 	pc.forwarder.Close()
 	pc.state = POLE_CLIENT_CLOSED
-	elog.Error("client closed")
+	pc.wg.Done()
+	elog.Error("polevpn client closed")
 
 }

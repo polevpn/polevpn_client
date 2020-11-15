@@ -2,43 +2,68 @@ package main
 
 import (
 	"flag"
+	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/polevpn/elog"
 )
 
-func init() {
+var endpoint string
+var user string
+var pwd string
+var sni string
+var mode bool
 
+func init() {
+	flag.StringVar(&endpoint, "e", "", "server connect to")
+	flag.StringVar(&user, "u", "", "login user")
+	flag.StringVar(&pwd, "p", "", "login password")
+	flag.StringVar(&sni, "s", "www.apple.com", "fake domain")
+	flag.BoolVar(&mode, "m", false, "global route mode")
+}
+
+func signalHandler() {
+
+	c := make(chan os.Signal)
+	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	go func() {
+		for s := range c {
+			switch s {
+			case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
+				elog.Fatal("receive exit signal,exit")
+			case syscall.SIGUSR1:
+			case syscall.SIGUSR2:
+			default:
+			}
+		}
+	}()
 }
 
 func main() {
 
 	flag.Parse()
-	defer elog.Flush()
+	signalHandler()
 
-	endpoint := "ws://27.125.149.37:8080/ws"
-	user := "polevpn"
-	pwd := "123456"
+	go func() {
+		for range time.NewTicker(time.Second * 5).C {
+			m := runtime.MemStats{}
+			runtime.ReadMemStats(&m)
+			elog.Printf("mem=%v,go=%v", m.HeapAlloc, runtime.NumGoroutine())
+		}
+	}()
 
-	client, err := NewPoleVpnClient()
+	client, err := NewPoleVpnClient(mode)
 
 	if err != nil {
 		elog.Fatal("new polevpn client fail", err)
 	}
 
-	err = client.Start(endpoint, user, pwd)
-
+	err = client.Start(endpoint, user, pwd, sni)
 	if err != nil {
 		elog.Fatal("start polevpn client fail", err)
 	}
-
-	for range time.NewTicker(time.Second * 5).C {
-		m := runtime.MemStats{}
-		runtime.ReadMemStats(&m)
-		elog.Printf("mem=%v,go=%v", m.HeapAlloc, runtime.NumGoroutine())
-	}
-
-	time.Sleep(time.Hour)
-
+	client.WaitStop()
 }

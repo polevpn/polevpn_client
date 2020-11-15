@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -27,6 +29,7 @@ const (
 	TCP_MAX_BUFFER_SIZE      = 8192
 	UDP_CONNECTION_IDLE_TIME = 1
 	CH_WRITE_SIZE            = 1024
+	TCP_CONNECT_TIMEOUT      = 2
 )
 
 type LocalForwarder struct {
@@ -156,9 +159,9 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 
 	addr, _ := ep.GetLocalAddress()
 	laddr, _ := net.ResolveTCPAddr("tcp4", localip+":0")
-	raddr, _ := net.ResolveTCPAddr("tcp4", addr.Addr.String()+":"+strconv.Itoa(int(addr.Port)))
-
-	conn, err1 := net.DialTCP("tcp4", laddr, raddr)
+	raddr := addr.Addr.String() + ":" + strconv.Itoa(int(addr.Port))
+	d := net.Dialer{Timeout: time.Second * TCP_CONNECT_TIMEOUT, LocalAddr: laddr}
+	conn, err1 := d.Dial("tcp4", raddr)
 	if err1 != nil {
 		log.Println("conn dial error ", err1)
 		ep.Close()
@@ -340,6 +343,10 @@ func (lf *LocalForwarder) tcpRead(r *tcp.ForwarderRequest, wq *waiter.Queue, ep 
 		}
 		wch <- v
 	}
+}
+
+func typeof(v interface{}) {
+	fmt.Println(reflect.TypeOf(v))
 }
 
 func (lf *LocalForwarder) tcpWrite(r *tcp.ForwarderRequest, wq *waiter.Queue, ep tcpip.Endpoint, conn net.Conn) {
