@@ -164,7 +164,7 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 		return
 	}
 
-	pc.netservice, pc.sysdns, err = pc.tunio.GetDnsServer()
+	pc.netservice, pc.sysdns, err = pc.tunio.GetNetSeriveDns()
 
 	if err != nil {
 		elog.Error("get system dns server fail", err)

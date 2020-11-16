@@ -90,11 +90,11 @@ func (t *TunIO) RemoveDnsServer(service string) error {
 	return nil
 }
 
-func (t *TunIO) GetDnsServer() (string, string, error) {
+func (t *TunIO) GetNetSeriveDns() (string, string, error) {
 
 	out, err := exec.Command("bash", "-c", "networksetup -listallnetworkservices").Output()
 	if err != nil {
-		return "", "", errors.New(err.Error() + ":" + string(out))
+		return "", "", errors.New(err.Error() + "," + string(out))
 	}
 
 	a := strings.Split(string(out), "\n")
