@@ -2,9 +2,12 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"io"
 	"net"
+	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -14,6 +17,11 @@ import (
 const (
 	CH_WEBSOCKET_WRITE_SIZE = 2048
 )
+
+var ErrIPNotExist = errors.New("reconnect ip is not exist")
+var ErrLoginVerify = errors.New("login verify fail")
+var ErrConnectUnknown = errors.New("server unknown error")
+var ErrNetwork = errors.New("network error")
 
 type WebSocketConn struct {
 	conn    *websocket.Conn
@@ -33,38 +41,7 @@ func NewWebSocketConn() *WebSocketConn {
 	}
 }
 
-func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, sni string) error {
-
-	localip, err := GetLocalIp()
-	if err != nil {
-		return err
-	}
-
-	tlsconfig := &tls.Config{
-		ServerName:         sni,
-		InsecureSkipVerify: true,
-	}
-
-	d := websocket.Dialer{
-		NetDialContext:  (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
-		TLSClientConfig: tlsconfig,
-	}
-	conn, _, err := d.Dial(endpoint+"?user="+url.QueryEscape(user)+"&pwd="+url.QueryEscape(pwd), nil)
-
-	if err != nil {
-		return err
-	}
-
-	wsc.mutex.Lock()
-	defer wsc.mutex.Unlock()
-
-	wsc.conn = conn
-	wsc.wch = make(chan []byte, CH_WEBSOCKET_WRITE_SIZE)
-	wsc.closed = false
-	return nil
-}
-
-func (wsc *WebSocketConn) ReConnect(endpoint string, user string, pwd string, ip string, sni string) error {
+func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip string, sni string) error {
 
 	localip, err := GetLocalIp()
 	if err != nil {
@@ -81,10 +58,19 @@ func (wsc *WebSocketConn) ReConnect(endpoint string, user string, pwd string, ip
 		TLSClientConfig: tlsconfig,
 	}
 
-	conn, _, err := d.Dial(endpoint+"?user="+url.QueryEscape(user)+"&pwd="+url.QueryEscape(pwd)+"&ip="+ip, nil)
+	conn, resp, err := d.Dial(endpoint+"?user="+url.QueryEscape(user)+"&pwd="+url.QueryEscape(pwd)+"&ip="+ip, nil)
 
 	if err != nil {
-		return err
+		if resp != nil {
+			if resp.StatusCode == http.StatusBadRequest {
+				return ErrIPNotExist
+			} else if resp.StatusCode == http.StatusForbidden {
+				return ErrLoginVerify
+			} else {
+				return ErrConnectUnknown
+			}
+		}
+		return ErrNetwork
 	}
 
 	wsc.mutex.Lock()
@@ -142,7 +128,7 @@ func (wsc *WebSocketConn) read() {
 	for {
 		mtype, pkt, err := wsc.conn.ReadMessage()
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF || strings.Index(err.Error(), "use of closed network connection") > -1 {
 				elog.Info(wsc.String(), "conn closed")
 			} else {
 				elog.Error(wsc.String(), "conn read exception:", err)

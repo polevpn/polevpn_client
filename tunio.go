@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os/exec"
+	"strings"
 
 	"github.com/polevpn/elog"
 	"github.com/polevpn/geoip"
@@ -69,9 +70,30 @@ func (t *TunIO) SetIPAddressAndEnable(ip1 string, ip2 string) error {
 	return nil
 }
 
+func (t *TunIO) SetDnsServer(ip string) error {
+
+	out, err := exec.Command("bash", "-c", "networksetup -setdnsservers Wi-Fi "+ip).Output()
+
+	if err != nil {
+		return errors.New(err.Error() + "," + string(out))
+	}
+	return nil
+}
+
 func (t *TunIO) AddRoute(cidr string, gw string) error {
 
 	out, err := exec.Command("bash", "-c", "route -n add -net "+cidr+" "+gw).Output()
+
+	if err != nil {
+		return errors.New(err.Error() + "," + string(out))
+	}
+	return err
+
+}
+
+func (t *TunIO) DelRoute(cidr string) error {
+
+	out, err := exec.Command("bash", "-c", "route -n delete -net "+cidr).Output()
 
 	if err != nil {
 		return errors.New(err.Error() + "," + string(out))
@@ -114,7 +136,11 @@ func (t *TunIO) read() {
 		pkt := make([]byte, t.mtu)
 		n, err := t.ifce.Read(pkt)
 		if err != nil {
-			elog.Error("read pkg from tun fail", err)
+			if err == io.EOF || strings.Index(err.Error(), "file already closed") > -1 {
+				elog.Info("tun device closed")
+			} else {
+				elog.Error("read pkg from tun fail", err)
+			}
 			return
 		}
 		pkt = pkt[:n]
@@ -130,17 +156,11 @@ func (t *TunIO) dispatch(pkt []byte) {
 	direct := false
 	if ipv4pkg.Protocol() == uint8(icmp.ProtocolNumber4) {
 		if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
-			//elog.Printf("ICMP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
 			direct = true
 		}
 	} else if ipv4pkg.Protocol() == uint8(tcp.ProtocolNumber) {
-		tcppkg := header.TCP(pkt[IP4_HEADER_LEN:])
-		if tcppkg.DestinationPort() == DNS_PORT {
-			elog.Info("tcp dns request")
-		}
 
 		if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
-			//elog.Printf("TCP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
 			direct = true
 		}
 	} else if ipv4pkg.Protocol() == uint8(udp.ProtocolNumber) {
@@ -155,14 +175,13 @@ func (t *TunIO) dispatch(pkt []byte) {
 					name := msg.Questions[i].Name.String()
 					name = name[:len(name)-1]
 					if geoip.IsDirectDomainRecursive(name) {
-						elog.Printf("DNS CN DOMAIN %v", name)
+						elog.Debugf("DNS CN DOMAIN %v", name)
 						direct = true
 					}
 				}
 			}
 		} else {
 			if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
-				//elog.Printf("UDP CN IP %v", ipv4pkg.DestinationAddress().To4().String())
 				direct = true
 			}
 		}
@@ -177,10 +196,8 @@ func (t *TunIO) dispatch(pkt []byte) {
 	}
 
 	if direct {
-		//elog.Info("to local forwarder")
 		t.sendIPPacketToLocalForwarder(pkt)
 	} else {
-		//elog.Info("to remote forwarder")
 		t.sendIPPacketToRemoteWSConn(pkt)
 	}
 
@@ -223,8 +240,8 @@ func (t *TunIO) write() {
 				}
 				_, err := t.ifce.Write(pkt)
 				if err != nil {
-					if err == io.EOF {
-						elog.Info("tun may be closed")
+					if err == io.EOF || strings.Index(err.Error(), "file already closed") > -1 {
+						elog.Info("tun device closed")
 					} else {
 						elog.Error("tun write error", err)
 					}
@@ -238,7 +255,7 @@ func (t *TunIO) write() {
 func (t *TunIO) Enqueue(pkt []byte) {
 
 	if t.IsClosed() {
-		elog.Error("tun device have been closed")
+		elog.Debug("tun device have been closed")
 		return
 	}
 

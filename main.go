@@ -25,7 +25,7 @@ func init() {
 	flag.BoolVar(&mode, "m", false, "global route mode")
 }
 
-func signalHandler() {
+func signalHandler(pc *PoleVpnClient) {
 
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -33,6 +33,9 @@ func signalHandler() {
 		for s := range c {
 			switch s {
 			case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
+				if pc != nil {
+					pc.Stop()
+				}
 				elog.Fatal("receive exit signal,exit")
 			case syscall.SIGUSR1:
 			case syscall.SIGUSR2:
@@ -45,8 +48,6 @@ func signalHandler() {
 func main() {
 
 	flag.Parse()
-	signalHandler()
-
 	go func() {
 		for range time.NewTicker(time.Second * 5).C {
 			m := runtime.MemStats{}
@@ -65,5 +66,8 @@ func main() {
 	if err != nil {
 		elog.Fatal("start polevpn client fail", err)
 	}
+
+	signalHandler(client)
+
 	client.WaitStop()
 }

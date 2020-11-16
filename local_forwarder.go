@@ -8,6 +8,7 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/polevpn/elog"
@@ -29,14 +30,15 @@ const (
 	TCP_MAX_BUFFER_SIZE      = 8192
 	UDP_CONNECTION_IDLE_TIME = 1
 	CH_WRITE_SIZE            = 1024
-	TCP_CONNECT_TIMEOUT      = 2
+	TCP_CONNECT_TIMEOUT      = 10
 )
 
 type LocalForwarder struct {
-	s     *stack.Stack
-	ep    *channel.Endpoint
-	wq    *waiter.Queue
-	tunio *TunIO
+	s      *stack.Stack
+	ep     *channel.Endpoint
+	wq     *waiter.Queue
+	closed bool
+	tunio  *TunIO
 }
 
 func NewLocalForwarder() (*LocalForwarder, error) {
@@ -97,7 +99,7 @@ func NewLocalForwarder() (*LocalForwarder, error) {
 	})
 
 	s.SetTransportProtocolHandler(tcp.ProtocolNumber, tf.HandlePacket)
-
+	forwarder.closed = false
 	forwarder.s = s
 	forwarder.ep = ep
 	forwarder.wq = &waiter.Queue{}
@@ -110,6 +112,9 @@ func (lf *LocalForwarder) SetTunIO(tunio *TunIO) {
 }
 
 func (lf *LocalForwarder) Write(pkg []byte) {
+	if lf.closed {
+		return
+	}
 	pkgBuffer := tcpip.PacketBuffer{Data: buffer.NewViewFromBytes(pkg).ToVectorisedView()}
 	lf.ep.InjectInbound(ipv4.ProtocolNumber, pkgBuffer)
 }
@@ -118,7 +123,7 @@ func (lf *LocalForwarder) read() {
 	for {
 		pkgInfo, ok := <-lf.ep.C
 		if !ok {
-			elog.Error("get pkt from link channel fail,maybe channel closed")
+			elog.Info("link channel closed")
 			return
 		}
 		view := buffer.NewVectorisedView(1, []buffer.View{pkgInfo.Pkt.Header.View()})
@@ -134,26 +139,36 @@ func (lf *LocalForwarder) StartProcess() {
 }
 
 func (lf *LocalForwarder) Close() {
+	defer PanicHandler()
+
+	if lf.closed {
+		return
+	}
+	lf.closed = true
+
+	lf.wq.Notify(waiter.EventIn)
 	lf.s.Close()
+	time.Sleep(time.Millisecond * 100)
 	close(lf.ep.C)
 }
 
 func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 
-	ep, err := r.CreateEndpoint(lf.wq)
+	wq := &waiter.Queue{}
+	ep, err := r.CreateEndpoint(wq)
 	if err != nil {
 		elog.Error("create tcp endpint error", err)
 		r.Complete(true)
 		return
 	}
 
-	elog.Println(r.ID(), "connect")
+	elog.Debug(r.ID(), "tcp connect")
 
 	localip, err1 := GetLocalIp()
 	if err1 != nil {
 		elog.Error("get local ip fail", err1)
-		ep.Close()
 		r.Complete(true)
+		ep.Close()
 		return
 	}
 
@@ -164,25 +179,30 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 	conn, err1 := d.Dial("tcp4", raddr)
 	if err1 != nil {
 		log.Println("conn dial error ", err1)
-		ep.Close()
 		r.Complete(true)
+		ep.Close()
 		return
 	}
-	go lf.tcpRead(r, lf.wq, ep, conn)
-	go lf.tcpWrite(r, lf.wq, ep, conn)
+	go lf.tcpRead(r, wq, ep, conn)
+	go lf.tcpWrite(r, wq, ep, conn)
 }
 
-func (lf *LocalForwarder) udpRead(ep tcpip.Endpoint, conn *net.UDPConn, timer *time.Ticker) {
+func (lf *LocalForwarder) udpRead(r *udp.ForwarderRequest, ep tcpip.Endpoint, wq *waiter.Queue, conn *net.UDPConn, timer *time.Ticker) {
 
 	defer func() {
+		elog.Debug(r.ID(), "udp closed")
 		ep.Close()
 		conn.Close()
 	}()
 
 	waitEntry, notifyCh := waiter.NewChannelEntry(nil)
+	wq.EventRegister(&waitEntry, waiter.EventIn)
+	defer wq.EventUnregister(&waitEntry)
 
-	lf.wq.EventRegister(&waitEntry, waiter.EventIn)
-	defer lf.wq.EventUnregister(&waitEntry)
+	gwaitEntry, gnotifyCh := waiter.NewChannelEntry(nil)
+
+	lf.wq.EventRegister(&gwaitEntry, waiter.EventIn)
+	defer lf.wq.EventUnregister(&gwaitEntry)
 
 	wch := make(chan []byte, CH_WRITE_SIZE)
 
@@ -192,7 +212,7 @@ func (lf *LocalForwarder) udpRead(ep tcpip.Endpoint, conn *net.UDPConn, timer *t
 		for {
 			pkt, ok := <-wch
 			if !ok {
-				elog.Info("udp wch closed,exit write process")
+				elog.Debug("udp wch closed,exit write process")
 				return
 			} else {
 				_, err1 := conn.Write(pkt)
@@ -217,9 +237,11 @@ func (lf *LocalForwarder) udpRead(ep tcpip.Endpoint, conn *net.UDPConn, timer *t
 				select {
 				case <-notifyCh:
 					continue
+				case <-gnotifyCh:
+					return
 				case <-timer.C:
 					if time.Now().Sub(lastTime) > time.Minute*UDP_CONNECTION_IDLE_TIME {
-						elog.Info("udp connection expired,close it")
+						elog.Debug("udp connection expired,close it")
 						timer.Stop()
 						return
 					} else {
@@ -237,7 +259,7 @@ func (lf *LocalForwarder) udpRead(ep tcpip.Endpoint, conn *net.UDPConn, timer *t
 	}
 }
 
-func (lf *LocalForwarder) udpWrite(ep tcpip.Endpoint, conn *net.UDPConn, addr *tcpip.FullAddress) {
+func (lf *LocalForwarder) udpWrite(r *udp.ForwarderRequest, ep tcpip.Endpoint, wq *waiter.Queue, conn *net.UDPConn, addr *tcpip.FullAddress) {
 
 	defer func() {
 		ep.Close()
@@ -249,7 +271,7 @@ func (lf *LocalForwarder) udpWrite(ep tcpip.Endpoint, conn *net.UDPConn, addr *t
 		n, err1 := conn.Read(udppkg)
 
 		if err1 != nil {
-			if err1 != io.EOF {
+			if err1 != io.EOF && strings.Index(err1.Error(), "use of closed network connection") < 0 {
 				elog.Error("udp conn readfrom error ", err1)
 			}
 			return
@@ -264,13 +286,14 @@ func (lf *LocalForwarder) udpWrite(ep tcpip.Endpoint, conn *net.UDPConn, addr *t
 }
 
 func (lf *LocalForwarder) forwardUDP(r *udp.ForwarderRequest) {
-
-	ep, err := r.CreateEndpoint(lf.wq)
+	wq := &waiter.Queue{}
+	ep, err := r.CreateEndpoint(wq)
 	if err != nil {
 		elog.Error("create endpint error", err)
 		return
 	}
 
+	elog.Debug(r.ID(), "udp connect")
 	localip, err1 := GetLocalIp()
 	if err1 != nil {
 		elog.Error("get local ip fail", err1)
@@ -290,16 +313,16 @@ func (lf *LocalForwarder) forwardUDP(r *udp.ForwarderRequest) {
 	timer := time.NewTicker(time.Minute)
 	addr := &tcpip.FullAddress{Addr: r.ID().RemoteAddress, Port: r.ID().RemotePort}
 
-	go lf.udpRead(ep, conn, timer)
-	go lf.udpWrite(ep, conn, addr)
+	go lf.udpRead(r, ep, wq, conn, timer)
+	go lf.udpWrite(r, ep, wq, conn, addr)
 }
 
 func (lf *LocalForwarder) tcpRead(r *tcp.ForwarderRequest, wq *waiter.Queue, ep tcpip.Endpoint, conn net.Conn) {
 	defer func() {
-		elog.Println(r.ID(), "closed")
+		elog.Debug(r.ID(), "tcp closed")
+		r.Complete(true)
 		ep.Close()
 		conn.Close()
-		r.Complete(true)
 	}()
 
 	// Create wait queue entry that notifies a channel.
@@ -307,6 +330,12 @@ func (lf *LocalForwarder) tcpRead(r *tcp.ForwarderRequest, wq *waiter.Queue, ep 
 
 	wq.EventRegister(&waitEntry, waiter.EventIn)
 	defer wq.EventUnregister(&waitEntry)
+
+	// Create wait queue entry that notifies a channel.
+	gwaitEntry, gnotifyCh := waiter.NewChannelEntry(nil)
+
+	lf.wq.EventRegister(&gwaitEntry, waiter.EventIn)
+	defer lf.wq.EventUnregister(&gwaitEntry)
 
 	wch := make(chan []byte, CH_WRITE_SIZE)
 
@@ -316,7 +345,7 @@ func (lf *LocalForwarder) tcpRead(r *tcp.ForwarderRequest, wq *waiter.Queue, ep 
 		for {
 			pkt, ok := <-wch
 			if !ok {
-				elog.Info("wch closed,exit write process")
+				elog.Debug("wch closed,exit write process")
 				return
 			} else {
 				_, err1 := conn.Write(pkt)
@@ -333,9 +362,15 @@ func (lf *LocalForwarder) tcpRead(r *tcp.ForwarderRequest, wq *waiter.Queue, ep 
 	for {
 		v, _, err := ep.Read(nil)
 		if err != nil {
+
 			if err == tcpip.ErrWouldBlock {
-				<-notifyCh
-				continue
+				select {
+				case <-notifyCh:
+					continue
+				case <-gnotifyCh:
+					return
+				}
+
 			} else if err != tcpip.ErrClosedForReceive && err != tcpip.ErrClosedForSend {
 				elog.Error("endpoint read fail", err)
 			}
@@ -359,7 +394,7 @@ func (lf *LocalForwarder) tcpWrite(r *tcp.ForwarderRequest, wq *waiter.Queue, ep
 		var buf []byte = make([]byte, TCP_MAX_BUFFER_SIZE)
 		n, err := conn.Read(buf)
 		if err != nil {
-			if err != io.EOF {
+			if err != io.EOF && strings.Index(err.Error(), "use of closed network connection") < 0 {
 				elog.Error("conn read error", err)
 			}
 			break
