@@ -70,14 +70,51 @@ func (t *TunIO) SetIPAddressAndEnable(ip1 string, ip2 string) error {
 	return nil
 }
 
-func (t *TunIO) SetDnsServer(ip string) error {
+func (t *TunIO) SetDnsServer(ip string, service string) error {
 
-	out, err := exec.Command("bash", "-c", "networksetup -setdnsservers Wi-Fi "+ip).Output()
+	out, err := exec.Command("bash", "-c", "networksetup -setdnsservers "+service+" "+ip).Output()
 
 	if err != nil {
 		return errors.New(err.Error() + "," + string(out))
 	}
 	return nil
+}
+
+func (t *TunIO) RemoveDnsServer(service string) error {
+
+	out, err := exec.Command("bash", "-c", "networksetup -setdnsservers "+service+" empty").Output()
+
+	if err != nil {
+		return errors.New(err.Error() + "," + string(out))
+	}
+	return nil
+}
+
+func (t *TunIO) GetDnsServer() (string, string, error) {
+
+	out, err := exec.Command("bash", "-c", "networksetup -listallnetworkservices").Output()
+	if err != nil {
+		return "", "", errors.New(err.Error() + ":" + string(out))
+	}
+
+	a := strings.Split(string(out), "\n")
+
+	for _, v := range a {
+		v = strings.Trim(string(v), " \n\r\t")
+		out, err := exec.Command("bash", "-c", "networksetup -getdnsservers \""+v+"\"").Output()
+		if err != nil {
+			continue
+		} else {
+			dns := strings.Trim(string(out), " \n\r\t")
+			ip := net.ParseIP(dns)
+			if ip == nil {
+				continue
+			} else {
+				return v, dns, nil
+			}
+		}
+	}
+	return "", "", errors.New("no netservice have dns")
 }
 
 func (t *TunIO) AddRoute(cidr string, gw string) error {
@@ -187,7 +224,7 @@ func (t *TunIO) dispatch(pkt []byte) {
 		}
 
 	} else {
-		elog.Info("unknown packet")
+		elog.Infof("unknown packet ip type=%v,transport type=%v", ipv4pkg.Protocol(), ipv4pkg.TransportProtocol())
 		return
 	}
 

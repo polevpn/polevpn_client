@@ -40,6 +40,8 @@ type PoleVpnClient struct {
 	reconnecting      bool
 	wg                *sync.WaitGroup
 	mode              bool
+	sysdns            string
+	netservice        string
 }
 
 func NewPoleVpnClient(mode bool) (*PoleVpnClient, error) {
@@ -162,7 +164,15 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 		return
 	}
 
-	err = pc.tunio.SetDnsServer(dns)
+	pc.netservice, pc.sysdns, err = pc.tunio.GetDnsServer()
+
+	if err != nil {
+		elog.Error("get system dns server fail", err)
+		pc.Stop()
+		return
+	}
+
+	err = pc.tunio.SetDnsServer(dns, pc.netservice)
 
 	if err != nil {
 		elog.Error("set dns server fail", err)
@@ -339,6 +349,10 @@ func (pc *PoleVpnClient) Stop() {
 	pc.forwarder.Close()
 	pc.wsconn.Close(false)
 	pc.tunio.Close()
+	if pc.sysdns != "" {
+		pc.tunio.SetDnsServer(pc.sysdns, pc.netservice)
+	}
+
 	pc.state = POLE_CLIENT_CLOSED
 	pc.wg.Done()
 	elog.Error("polevpn client closed")
