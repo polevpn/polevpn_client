@@ -8,7 +8,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/polevpn/anyvalue"
 	"github.com/polevpn/elog"
+	"github.com/polevpn/poleclient/core"
 )
 
 var endpoint string
@@ -25,7 +27,7 @@ func init() {
 	flag.BoolVar(&mode, "m", false, "global route mode")
 }
 
-func signalHandler(pc *PoleVpnClient) {
+func signalHandler(pc *core.PoleVpnClient) {
 
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -33,10 +35,12 @@ func signalHandler(pc *PoleVpnClient) {
 		for s := range c {
 			switch s {
 			case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
+				elog.Info("receive exit signal,exit")
 				if pc != nil {
 					pc.Stop()
 				}
-				elog.Fatal("receive exit signal,exit")
+				elog.Flush()
+				os.Exit(0)
 			case syscall.SIGUSR1:
 			case syscall.SIGUSR2:
 			default:
@@ -45,22 +49,73 @@ func signalHandler(pc *PoleVpnClient) {
 	}()
 }
 
+var device *core.TunDevice
+var networkmgr core.NetworkManager
+
+func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
+
+	switch event {
+	case core.CLIENT_EVENT_ADDRESS_ALLOCED:
+		{
+			err := networkmgr.SetNetwork(device.GetInterface().Name(), av.Get("ip").AsStr(), av.Get("dns").AsStr())
+			if err != nil {
+				elog.Error("set network fail,", err)
+				client.Stop()
+			}
+		}
+	case core.CLIENT_EVENT_STOPPED:
+		{
+			elog.Info("client stoped")
+			networkmgr.RestoreNetwork()
+		}
+	case core.CLIENT_EVENT_RECONNECTED:
+		elog.Info("client reconnected")
+	case core.CLIENT_EVENT_RECONNECTING:
+		elog.Info("client reconnecting")
+	case core.CLIENT_EVENT_STARTED:
+		elog.Info("client started")
+	case core.CLIENT_EVENT_ERROR:
+		elog.Info("client error", av.Get("error").AsStr())
+	default:
+		elog.Error("invalid evnet=", event)
+	}
+
+}
+
 func main() {
 
 	flag.Parse()
+	defer elog.Flush()
+
 	go func() {
-		for range time.NewTicker(time.Second * 5).C {
+		for range time.NewTicker(time.Second * 15).C {
 			m := runtime.MemStats{}
 			runtime.ReadMemStats(&m)
 			elog.Printf("mem=%v,go=%v", m.HeapAlloc, runtime.NumGoroutine())
 		}
 	}()
 
-	client, err := NewPoleVpnClient(mode)
+	if runtime.GOOS == "darwin" {
+		networkmgr = core.NewDarwinNetworkManager()
+	} else {
+		elog.Fatal("platform not support")
+	}
+
+	device = core.NewTunDevice()
+	err := device.Create()
+
+	if err != nil {
+		elog.Fatal("create device fail", err)
+	}
+
+	client, err := core.NewPoleVpnClient()
 
 	if err != nil {
 		elog.Fatal("new polevpn client fail", err)
 	}
+	client.SetEventHandler(eventHandler)
+	client.SetRouteMode(mode)
+	client.AttachTunDevice(device)
 
 	err = client.Start(endpoint, user, pwd, sni)
 	if err != nil {

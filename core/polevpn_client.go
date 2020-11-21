@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"errors"
@@ -6,8 +6,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/netstack/tcpip/header"
+	"github.com/google/netstack/tcpip/transport/icmp"
 	"github.com/polevpn/anyvalue"
 	"github.com/polevpn/elog"
+	"github.com/polevpn/geoip"
+	"github.com/polevpn/netstack/tcpip/transport/tcp"
+	"github.com/polevpn/netstack/tcpip/transport/udp"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 const (
@@ -25,6 +31,15 @@ const (
 	WEBSOCKET_NO_HEARTBEAT_TIMES = 4
 )
 
+const (
+	CLIENT_EVENT_ADDRESS_ALLOCED = 1
+	CLIENT_EVENT_RECONNECTING    = 2
+	CLIENT_EVENT_STARTED         = 3
+	CLIENT_EVENT_STOPPED         = 4
+	CLIENT_EVENT_ERROR           = 5
+	CLIENT_EVENT_RECONNECTED     = 6
+)
+
 type PoleVpnClient struct {
 	tunio             *TunIO
 	wsconn            *WebSocketConn
@@ -40,27 +55,22 @@ type PoleVpnClient struct {
 	reconnecting      bool
 	wg                *sync.WaitGroup
 	mode              bool
-	sysdns            string
-	netservice        string
+	device            *TunDevice
+	handler           func(int, *PoleVpnClient, *anyvalue.AnyValue)
 }
 
-func NewPoleVpnClient(mode bool) (*PoleVpnClient, error) {
+func NewPoleVpnClient() (*PoleVpnClient, error) {
 
 	var err error
 
-	tunio, err := NewTunIO(CH_TUN_DEVICE_WRITE_SIZE, mode)
-
-	if err != nil {
-		elog.Fatal("create tun fail", err)
-		return nil, err
-	}
+	tunio := NewTunIO(CH_TUN_DEVICE_WRITE_SIZE)
 
 	wsconn := NewWebSocketConn()
 
 	forwarder, err := NewLocalForwarder()
 
 	if err != nil {
-		elog.Error("websocket connect fail", err)
+		elog.Error("forwarder create fail", err)
 		return nil, err
 	}
 
@@ -71,10 +81,23 @@ func NewPoleVpnClient(mode bool) (*PoleVpnClient, error) {
 		state:     POLE_CLIENT_INIT,
 		mutex:     &sync.Mutex{},
 		wg:        &sync.WaitGroup{},
-		mode:      mode,
 	}
 
 	return client, nil
+}
+
+func (pc *PoleVpnClient) AttachTunDevice(device *TunDevice) {
+	pc.device = device
+	pc.tunio.AttachDevice(device)
+	pc.tunio.StartProcess()
+}
+
+func (pc *PoleVpnClient) SetEventHandler(handler func(int, *PoleVpnClient, *anyvalue.AnyValue)) {
+	pc.handler = handler
+}
+
+func (pc *PoleVpnClient) SetRouteMode(mode bool) {
+	pc.mode = mode
 }
 
 func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni string) error {
@@ -83,6 +106,9 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 	defer pc.mutex.Unlock()
 
 	if pc.state != POLE_CLIENT_INIT {
+		if pc.handler != nil {
+			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "client stoped or not init"))
+		}
 		return errors.New("client stoped or not init")
 	}
 
@@ -93,39 +119,120 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 
 	var err error
 
-	elog.Infof("connect to %v", endpoint)
-
 	err = pc.wsconn.Connect(endpoint, user, pwd, "", sni)
 	if err != nil {
 		elog.Error("websocket connect fail", err)
+		if pc.handler != nil {
+			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "websocket connet fail,"+err.Error()))
+		}
 		return err
 	}
 
-	elog.Info("connect ok")
-
 	pc.wsconn.SetHandler(CMD_ALLOC_IPADDR, pc.handlerAllocAdressRespose)
-
 	pc.wsconn.SetHandler(CMD_S2C_IPDATA, pc.handlerIPDataResponse)
-
 	pc.wsconn.SetHandler(CMD_CLIENT_CLOSED, pc.handlerWSConnCloseEvent)
 	pc.wsconn.SetHandler(CMD_HEART_BEAT, pc.handlerHeartBeatRespose)
 
-	pc.forwarder.SetTunIO(pc.tunio)
-	pc.tunio.SetWebSocketConn(pc.wsconn)
-	pc.tunio.SetLocalForwarder(pc.forwarder)
+	pc.forwarder.SetPacketHandler(pc.handleForwarderPacket)
+	pc.tunio.SetPacketHandler(pc.handleTunPacket)
+
 	pc.wsconn.StartProcess()
 	pc.forwarder.StartProcess()
-	pc.tunio.StartProcess()
+
 	pc.AskAllocIPAddress()
+
 	pc.lasttimeHeartbeat = time.Now()
 	go pc.HeartBeat()
 	pc.state = POLE_CLIENT_RUNING
+	if pc.handler != nil {
+		pc.handler(CLIENT_EVENT_STARTED, pc, nil)
+	}
 	pc.wg.Add(1)
 	return nil
 }
 
 func (pc *PoleVpnClient) WaitStop() {
 	pc.wg.Wait()
+}
+
+func (pc *PoleVpnClient) handleForwarderPacket(pkt []byte) {
+	pc.tunio.Enqueue(pkt)
+}
+
+func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
+
+	var err error
+	ipv4pkg := header.IPv4(pkt)
+	direct := false
+	if ipv4pkg.Protocol() == uint8(icmp.ProtocolNumber4) {
+		if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
+			direct = true
+		}
+	} else if ipv4pkg.Protocol() == uint8(tcp.ProtocolNumber) {
+
+		if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
+			direct = true
+		}
+	} else if ipv4pkg.Protocol() == uint8(udp.ProtocolNumber) {
+		udppkg := header.UDP(pkt[IP4_HEADER_LEN:])
+		if udppkg.DestinationPort() == DNS_PORT {
+			var msg dnsmessage.Message
+			err = msg.Unpack(pkt[IP4_HEADER_LEN+UDP_HEADER_LEN:])
+			if err != nil {
+				elog.Error("parser dns packet fail", err)
+			} else {
+				for i := 0; i < len(msg.Questions); i++ {
+					name := msg.Questions[i].Name.String()
+					name = name[:len(name)-1]
+					if geoip.IsDirectDomainRecursive(name) {
+						elog.Debugf("DNS CN DOMAIN %v", name)
+						direct = true
+					}
+				}
+			}
+		} else {
+			if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
+				direct = true
+			}
+		}
+
+	} else {
+		elog.Infof("unknown packet ip type=%v,transport type=%v", ipv4pkg.Protocol(), ipv4pkg.TransportProtocol())
+		return
+	}
+
+	if pc.mode {
+		direct = false
+	}
+
+	if direct {
+		pc.sendIPPacketToLocalForwarder(pkt)
+	} else {
+		pc.sendIPPacketToRemoteWSConn(pkt)
+	}
+
+}
+
+func (pc *PoleVpnClient) sendIPPacketToLocalForwarder(pkt []byte) {
+	if pc.forwarder != nil {
+		pc.forwarder.Write(pkt)
+	} else {
+		elog.Error("local forwarder haven't set")
+	}
+}
+
+func (pc *PoleVpnClient) sendIPPacketToRemoteWSConn(pkt []byte) {
+
+	if pc.wsconn != nil {
+		buf := make([]byte, POLE_PACKET_HEADER_LEN+len(pkt))
+		copy(buf[POLE_PACKET_HEADER_LEN:], pkt)
+		polepkt := PolePacket(buf)
+		polepkt.SetCmd(CMD_C2S_IPDATA)
+		pc.wsconn.Send(polepkt)
+	} else {
+		elog.Error("remote ws conn haven't set")
+	}
+
 }
 
 func (pc *PoleVpnClient) AskAllocIPAddress() {
@@ -145,105 +252,23 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 	}
 
 	ip1 := av.Get("ip").AsStr()
-	dns := av.Get("dns").AsStr()
 
 	if ip1 == "" {
 		elog.Error("alloc ip fail,stop client")
-		pc.Stop()
-		return
-	}
-
-	ip := net.ParseIP(ip1).To4()
-	ip2 := net.IPv4(ip[0], ip[1], ip[2], ip[3]-1).To4().String()
-
-	elog.Infof("set tun device ip src ip:%v,dst ip:%v", ip1, ip2)
-	err = pc.tunio.SetIPAddressAndEnable(ip1, ip2)
-	if err != nil {
-		elog.Error("set address fail", err)
-		pc.Stop()
-		return
-	}
-
-	pc.netservice, pc.sysdns, err = pc.tunio.GetNetSeriveDns()
-
-	if err != nil {
-		elog.Error("get system dns server fail", err)
-		pc.Stop()
-		return
-	}
-
-	err = pc.tunio.SetDnsServer(dns, pc.netservice)
-
-	if err != nil {
-		elog.Error("set dns server fail", err)
-		pc.Stop()
-		return
-	}
-
-	pc.tunio.DelRoute("1/8")
-	err = pc.tunio.AddRoute("1/8", ip2)
-	if err != nil {
-		elog.Error("add route fail", err)
-		pc.Stop()
-		return
-	}
-	pc.tunio.DelRoute("2/7")
-	err = pc.tunio.AddRoute("2/7", ip2)
-	if err != nil {
-		elog.Error("add route fail", err)
-		pc.Stop()
-		return
-	}
-
-	pc.tunio.DelRoute("4/6")
-	err = pc.tunio.AddRoute("4/6", ip2)
-	if err != nil {
-		elog.Error("add route fail", err)
-		pc.Stop()
-		return
-	}
-
-	pc.tunio.DelRoute("8/5")
-	err = pc.tunio.AddRoute("8/5", ip2)
-	if err != nil {
-		elog.Error("add route fail", err)
-		pc.Stop()
-		return
-	}
-	pc.tunio.DelRoute("16/4")
-	err = pc.tunio.AddRoute("16/4", ip2)
-	if err != nil {
-		elog.Error("add route fail", err)
-		pc.Stop()
-		return
-	}
-
-	pc.tunio.DelRoute("32/3")
-	err = pc.tunio.AddRoute("32/3", ip2)
-	if err != nil {
-		elog.Error("add route fail", err)
-		pc.Stop()
-		return
-	}
-
-	pc.tunio.DelRoute("64/2")
-	err = pc.tunio.AddRoute("64/2", ip2)
-	if err != nil {
-		elog.Error("add route fail", err)
-		pc.Stop()
-		return
-	}
-
-	pc.tunio.DelRoute("128.0/1")
-	err = pc.tunio.AddRoute("128.0/1", ip2)
-	if err != nil {
-		elog.Error("add route fail", err)
+		if pc.handler != nil {
+			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "alloc ip fail"))
+			return
+		}
 		pc.Stop()
 		return
 	}
 
 	pc.allocip = ip1
 
+	if pc.handler != nil {
+		pc.handler(CLIENT_EVENT_ADDRESS_ALLOCED, pc, av)
+		return
+	}
 }
 
 func (pc *PoleVpnClient) handlerHeartBeatRespose(pkt PolePacket, wsc *WebSocketConn) {
@@ -274,6 +299,9 @@ func (pc *PoleVpnClient) reconnect() {
 	for i := 0; i < WEBSOCKET_RECONNECT_TIMES; i++ {
 
 		elog.Info("reconnecting")
+		if pc.handler != nil {
+			pc.handler(CLIENT_EVENT_RECONNECTING, pc, nil)
+		}
 		err := pc.wsconn.Connect(pc.endpoint, pc.user, pc.pwd, pc.allocip, pc.sni)
 		if err != nil {
 			if err == ErrNetwork {
@@ -298,11 +326,17 @@ func (pc *PoleVpnClient) reconnect() {
 			pc.SendHeartBeat()
 			success = true
 			pc.state = POLE_CLIENT_RUNING
+			if pc.handler != nil {
+				pc.handler(CLIENT_EVENT_RECONNECTED, pc, nil)
+			}
 			break
 		}
 	}
 	if success == false {
 		elog.Error("reconnet failed,stop client")
+		if pc.handler != nil {
+			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "reconnet failed"))
+		}
 		pc.Stop()
 	}
 	pc.reconnecting = false
@@ -345,16 +379,14 @@ func (pc *PoleVpnClient) Stop() {
 		return
 	}
 
-	elog.Error("polevpn client closing")
 	pc.forwarder.Close()
 	pc.wsconn.Close(false)
 	pc.tunio.Close()
-	if pc.sysdns != "" {
-		pc.tunio.SetDnsServer(pc.sysdns, pc.netservice)
-	}
 
 	pc.state = POLE_CLIENT_CLOSED
-	pc.wg.Done()
-	elog.Error("polevpn client closed")
 
+	if pc.handler != nil {
+		pc.handler(CLIENT_EVENT_STOPPED, pc, nil)
+	}
+	pc.wg.Done()
 }

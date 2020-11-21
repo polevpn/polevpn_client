@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"errors"
@@ -34,11 +34,11 @@ const (
 )
 
 type LocalForwarder struct {
-	s      *stack.Stack
-	ep     *channel.Endpoint
-	wq     *waiter.Queue
-	closed bool
-	tunio  *TunIO
+	s       *stack.Stack
+	ep      *channel.Endpoint
+	wq      *waiter.Queue
+	closed  bool
+	handler func([]byte)
 }
 
 func NewLocalForwarder() (*LocalForwarder, error) {
@@ -107,8 +107,8 @@ func NewLocalForwarder() (*LocalForwarder, error) {
 
 }
 
-func (lf *LocalForwarder) SetTunIO(tunio *TunIO) {
-	lf.tunio = tunio
+func (lf *LocalForwarder) SetPacketHandler(handler func([]byte)) {
+	lf.handler = handler
 }
 
 func (lf *LocalForwarder) Write(pkg []byte) {
@@ -121,15 +121,15 @@ func (lf *LocalForwarder) Write(pkg []byte) {
 
 func (lf *LocalForwarder) read() {
 	for {
-		pkgInfo, ok := <-lf.ep.C
-		if !ok {
-			elog.Info("link channel closed")
+		pkgInfo, err := lf.ep.Read()
+		if err != nil {
+			elog.Info(err)
 			return
 		}
 		view := buffer.NewVectorisedView(1, []buffer.View{pkgInfo.Pkt.Header.View()})
 		view.Append(pkgInfo.Pkt.Data)
-		if lf.tunio != nil {
-			lf.tunio.Enqueue(view.ToView())
+		if lf.handler != nil {
+			lf.handler(view.ToView())
 		}
 	}
 }
@@ -149,7 +149,7 @@ func (lf *LocalForwarder) Close() {
 	lf.wq.Notify(waiter.EventIn)
 	lf.s.Close()
 	time.Sleep(time.Millisecond * 100)
-	close(lf.ep.C)
+	lf.ep.Close()
 }
 
 func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
