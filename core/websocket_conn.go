@@ -44,10 +44,10 @@ func NewWebSocketConn() *WebSocketConn {
 
 func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip string, sni string) error {
 
-	localip, err := GetLocalIp()
-	if err != nil {
-		return err
-	}
+	// localip, err := GetLocalIp()
+	// if err != nil {
+	// 	return err
+	// }
 
 	tlsconfig := &tls.Config{
 		ServerName:         sni,
@@ -55,7 +55,8 @@ func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip s
 	}
 
 	d := websocket.Dialer{
-		NetDialContext:   (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
+		//NetDialContext:   (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
+		NetDialContext:   (&net.Dialer{LocalAddr: nil}).DialContext,
 		TLSClientConfig:  tlsconfig,
 		HandshakeTimeout: time.Second * WEBSOCKET_HANDSHAKE_TIMEOUT,
 	}
