@@ -162,18 +162,18 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 
 	plog.Debug(r.ID(), "tcp connect")
 
-	localip, err1 := GetLocalIp()
-	if err1 != nil {
-		plog.Error("get local ip fail", err1)
-		r.Complete(true)
-		ep.Close()
-		return
-	}
+	// localip, err1 := GetLocalIp()
+	// if err1 != nil {
+	// 	plog.Error("get local ip fail", err1)
+	// 	r.Complete(true)
+	// 	ep.Close()
+	// 	return
+	// }
 
 	addr, _ := ep.GetLocalAddress()
-	laddr, _ := net.ResolveTCPAddr("tcp4", localip+":0")
+	//laddr, _ := net.ResolveTCPAddr("tcp4", localip+":0")
 	raddr := addr.Addr.String() + ":" + strconv.Itoa(int(addr.Port))
-	d := net.Dialer{Timeout: time.Second * TCP_CONNECT_TIMEOUT, LocalAddr: laddr}
+	d := net.Dialer{Timeout: time.Second * TCP_CONNECT_TIMEOUT, LocalAddr: nil}
 	conn, err1 := d.Dial("tcp4", raddr)
 	if err1 != nil {
 		plog.Println("conn dial error ", err1)
@@ -292,16 +292,16 @@ func (lf *LocalForwarder) forwardUDP(r *udp.ForwarderRequest) {
 	}
 
 	plog.Debug(r.ID(), "udp connect")
-	localip, err1 := GetLocalIp()
-	if err1 != nil {
-		plog.Error("get local ip fail", err1)
-		return
-	}
+	// localip, err1 := GetLocalIp()
+	// if err1 != nil {
+	// 	plog.Error("get local ip fail", err1)
+	// 	return
+	// }
 
-	laddr, _ := net.ResolveUDPAddr("udp4", localip+":0")
+	//laddr, _ := net.ResolveUDPAddr("udp4", localip+":0")
 	raddr, _ := net.ResolveUDPAddr("udp4", r.ID().LocalAddress.To4().String()+":"+strconv.Itoa(int(r.ID().LocalPort)))
 
-	conn, err1 := net.DialUDP("udp4", laddr, raddr)
+	conn, err1 := net.DialUDP("udp4", nil, raddr)
 	if err1 != nil {
 		plog.Error("udp conn dial error ", err1)
 		ep.Close()
