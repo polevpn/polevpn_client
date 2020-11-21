@@ -1,6 +1,7 @@
 package polevpnmobile
 
 import (
+	"os"
 	"sync"
 
 	"github.com/polevpn/anyvalue"
@@ -48,6 +49,27 @@ type PoleVPN struct {
 	state          int
 }
 
+var plog *elog.EasyLogger
+
+type LogHandler struct {
+}
+
+func (lh *LogHandler) Write(data []byte) (int, error) {
+
+	return os.Stderr.Write(data)
+}
+
+func (lh *LogHandler) Flush() {
+
+}
+
+func init() {
+
+	plog = elog.NewEasyLogger("INFO", false, 1, &LogHandler{})
+	core.SetLogger(plog)
+	defer plog.Flush()
+}
+
 func NewPoleVPN() (*PoleVPN, error) {
 	client, err := core.NewPoleVpnClient()
 	if err != nil {
@@ -89,12 +111,13 @@ func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyv
 		defer pvm.mutex.Unlock()
 		pvm.state = POLEVPN_MOBILE_STARTED
 	case core.CLIENT_EVENT_ERROR:
-		elog.Info("client error", av.Get("error").AsStr())
+		log.Debug()
+		log.Info("client error", av.Get("error").AsStr())
 		if pvm.errCb != nil {
 			pvm.errCb.OnEvent(av.Get("error").AsStr())
 		}
 	default:
-		elog.Error("invalid evnet=", event)
+		log.Error("invalid evnet=", event)
 	}
 
 }

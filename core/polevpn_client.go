@@ -40,6 +40,8 @@ const (
 	CLIENT_EVENT_RECONNECTED     = 6
 )
 
+var plog *elog.EasyLogger
+
 type PoleVpnClient struct {
 	tunio             *TunIO
 	wsconn            *WebSocketConn
@@ -59,6 +61,16 @@ type PoleVpnClient struct {
 	handler           func(int, *PoleVpnClient, *anyvalue.AnyValue)
 }
 
+func init() {
+	if plog == nil {
+		plog = elog.GetLogger()
+	}
+}
+
+func SetLogger(elog *elog.EasyLogger) {
+	plog = elog
+}
+
 func NewPoleVpnClient() (*PoleVpnClient, error) {
 
 	var err error
@@ -70,7 +82,7 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 	forwarder, err := NewLocalForwarder()
 
 	if err != nil {
-		elog.Error("forwarder create fail", err)
+		plog.Error("forwarder create fail", err)
 		return nil, err
 	}
 
@@ -82,7 +94,6 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 		mutex:     &sync.Mutex{},
 		wg:        &sync.WaitGroup{},
 	}
-
 	return client, nil
 }
 
@@ -121,7 +132,7 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 
 	err = pc.wsconn.Connect(endpoint, user, pwd, "", sni)
 	if err != nil {
-		elog.Error("websocket connect fail", err)
+		plog.Error("websocket connect fail", err)
 		if pc.handler != nil {
 			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "websocket connet fail,"+err.Error()))
 		}
@@ -179,13 +190,13 @@ func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
 			var msg dnsmessage.Message
 			err = msg.Unpack(pkt[IP4_HEADER_LEN+UDP_HEADER_LEN:])
 			if err != nil {
-				elog.Error("parser dns packet fail", err)
+				plog.Error("parser dns packet fail", err)
 			} else {
 				for i := 0; i < len(msg.Questions); i++ {
 					name := msg.Questions[i].Name.String()
 					name = name[:len(name)-1]
 					if geoip.IsDirectDomainRecursive(name) {
-						elog.Debugf("DNS CN DOMAIN %v", name)
+						plog.Debugf("DNS CN DOMAIN %v", name)
 						direct = true
 					}
 				}
@@ -197,7 +208,7 @@ func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
 		}
 
 	} else {
-		elog.Infof("unknown packet ip type=%v,transport type=%v", ipv4pkg.Protocol(), ipv4pkg.TransportProtocol())
+		plog.Infof("unknown packet ip type=%v,transport type=%v", ipv4pkg.Protocol(), ipv4pkg.TransportProtocol())
 		return
 	}
 
@@ -217,7 +228,7 @@ func (pc *PoleVpnClient) sendIPPacketToLocalForwarder(pkt []byte) {
 	if pc.forwarder != nil {
 		pc.forwarder.Write(pkt)
 	} else {
-		elog.Error("local forwarder haven't set")
+		plog.Error("local forwarder haven't set")
 	}
 }
 
@@ -230,7 +241,7 @@ func (pc *PoleVpnClient) sendIPPacketToRemoteWSConn(pkt []byte) {
 		polepkt.SetCmd(CMD_C2S_IPDATA)
 		pc.wsconn.Send(polepkt)
 	} else {
-		elog.Error("remote ws conn haven't set")
+		plog.Error("remote ws conn haven't set")
 	}
 
 }
@@ -246,7 +257,7 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 	av, err := anyvalue.NewFromJson(pkt.Payload())
 
 	if err != nil {
-		elog.Error("alloc address av decode fail", err)
+		plog.Error("alloc address av decode fail", err)
 		pc.Stop()
 		return
 	}
@@ -254,7 +265,7 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 	ip1 := av.Get("ip").AsStr()
 
 	if ip1 == "" {
-		elog.Error("alloc ip fail,stop client")
+		plog.Error("alloc ip fail,stop client")
 		if pc.handler != nil {
 			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "alloc ip fail"))
 			return
@@ -272,7 +283,7 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 }
 
 func (pc *PoleVpnClient) handlerHeartBeatRespose(pkt PolePacket, wsc *WebSocketConn) {
-	elog.Debug("received heartbeat")
+	plog.Debug("received heartbeat")
 	pc.lasttimeHeartbeat = time.Now()
 }
 
@@ -281,14 +292,14 @@ func (pc *PoleVpnClient) handlerIPDataResponse(pkt PolePacket, wsc *WebSocketCon
 }
 
 func (pc *PoleVpnClient) handlerWSConnCloseEvent(pkt PolePacket, wsc *WebSocketConn) {
-	elog.Info("ws client closed,start reconnect")
+	plog.Info("ws client closed,start reconnect")
 	pc.reconnect()
 }
 
 func (pc *PoleVpnClient) reconnect() {
 
 	if pc.reconnecting == true {
-		elog.Info("wsconn is reconnecting")
+		plog.Info("wsconn is reconnecting")
 		return
 	}
 
@@ -298,27 +309,27 @@ func (pc *PoleVpnClient) reconnect() {
 	success := false
 	for i := 0; i < WEBSOCKET_RECONNECT_TIMES; i++ {
 
-		elog.Info("reconnecting")
+		plog.Info("reconnecting")
 		if pc.handler != nil {
 			pc.handler(CLIENT_EVENT_RECONNECTING, pc, nil)
 		}
 		err := pc.wsconn.Connect(pc.endpoint, pc.user, pc.pwd, pc.allocip, pc.sni)
 		if err != nil {
 			if err == ErrNetwork {
-				elog.Error("reconnect fail", err)
-				elog.Error("reconnect 10 seconds later")
+				plog.Error("reconnect fail", err)
+				plog.Error("reconnect 10 seconds later")
 				time.Sleep(time.Second * WEBSOCKET_RECONNECT_INTERVAL)
 				continue
 			} else if err == ErrIPNotExist {
-				elog.Error("ip address expired,reconnect and request new")
+				plog.Error("ip address expired,reconnect and request new")
 				pc.allocip = ""
 			} else {
-				elog.Error("server refuse connect")
+				plog.Error("server refuse connect")
 				break
 			}
 
 		} else {
-			elog.Info("reconnect ok")
+			plog.Info("reconnect ok")
 			if pc.allocip == "" {
 				pc.AskAllocIPAddress()
 			}
@@ -333,7 +344,7 @@ func (pc *PoleVpnClient) reconnect() {
 		}
 	}
 	if success == false {
-		elog.Error("reconnet failed,stop client")
+		plog.Error("reconnet failed,stop client")
 		if pc.handler != nil {
 			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "reconnet failed"))
 		}
@@ -359,7 +370,7 @@ func (pc *PoleVpnClient) HeartBeat() {
 		}
 		timeNow := time.Now()
 		if timeNow.Sub(pc.lasttimeHeartbeat) > time.Second*HEART_BEAT_INTERVAL*WEBSOCKET_NO_HEARTBEAT_TIMES {
-			elog.Error("have not recevied heartbeat for", WEBSOCKET_NO_HEARTBEAT_TIMES, "times,close connection and reconnet")
+			plog.Error("have not recevied heartbeat for", WEBSOCKET_NO_HEARTBEAT_TIMES, "times,close connection and reconnet")
 			pc.wsconn.Close(true)
 			pc.lasttimeHeartbeat = timeNow
 			continue
@@ -375,7 +386,7 @@ func (pc *PoleVpnClient) Stop() {
 	defer pc.mutex.Unlock()
 
 	if pc.state == POLE_CLIENT_CLOSED {
-		elog.Error("client have been closed")
+		plog.Error("client have been closed")
 		return
 	}
 

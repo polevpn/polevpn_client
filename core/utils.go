@@ -6,22 +6,20 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
-
-	"github.com/polevpn/elog"
 )
 
 func PanicHandler() {
 	if err := recover(); err != nil {
-		elog.Error("Panic Exception:", err)
-		elog.Error(string(debug.Stack()))
+		plog.Error("Panic Exception:", err)
+		plog.Error(string(debug.Stack()))
 	}
 }
 
 func PanicHandlerExit() {
 	if err := recover(); err != nil {
-		elog.Error("Panic Exception:", err)
-		elog.Error(string(debug.Stack()))
-		elog.Error("************Program Exit************")
+		plog.Error("Panic Exception:", err)
+		plog.Error(string(debug.Stack()))
+		plog.Error("************Program Exit************")
 		os.Exit(0)
 	}
 }

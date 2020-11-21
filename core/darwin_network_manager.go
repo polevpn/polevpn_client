@@ -5,8 +5,6 @@ import (
 	"net"
 	"os/exec"
 	"strings"
-
-	"github.com/polevpn/elog"
 )
 
 type DarwinNetworkManager struct {
@@ -105,7 +103,7 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string
 	ip := net.ParseIP(ip1).To4()
 	ip2 := net.IPv4(ip[0], ip[1], ip[2], ip[3]-1).To4().String()
 
-	elog.Infof("set tun device ip src ip:%v,dst ip:%v", ip1, ip2)
+	plog.Infof("set tun device ip src ip:%v,dst ip:%v", ip1, ip2)
 	err = nm.setIPAddressAndEnable(device, ip1, ip2)
 	if err != nil {
 		return errors.New("set address fail," + err.Error())
@@ -113,13 +111,13 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string
 
 	nm.netservice, nm.sysdns, err = nm.getNetSeriveDns()
 
-	elog.Infof("system network service:%v,dns:%v", nm.netservice, nm.sysdns)
+	plog.Infof("system network service:%v,dns:%v", nm.netservice, nm.sysdns)
 
 	if err != nil {
 		return errors.New("get system dns server fail," + err.Error())
 	}
 
-	elog.Infof("change network service %v dns to %v", nm.netservice, dns)
+	plog.Infof("change network service %v dns to %v", nm.netservice, dns)
 	err = nm.setDnsServer(dns, nm.netservice)
 
 	if err != nil {
@@ -129,7 +127,7 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string
 	routes := []string{"1/8", "2/7", "4/6", "8/5", "16/4", "32/3", "64/2", "128.0/1"}
 
 	for _, route := range routes {
-		elog.Info("add route ", route, "to", ip2)
+		plog.Info("add route ", route, "to", ip2)
 		nm.delRoute(route)
 		err = nm.addRoute(route, ip2)
 		if err != nil {
@@ -143,7 +141,7 @@ func (nm *DarwinNetworkManager) RestoreNetwork() {
 
 	nm.removeDnsServer(nm.netservice)
 	if nm.sysdns != "" {
-		elog.Infof("restore network service %v dns to %v", nm.netservice, nm.sysdns)
+		plog.Infof("restore network service %v dns to %v", nm.netservice, nm.sysdns)
 		nm.setDnsServer(nm.sysdns, nm.netservice)
 	}
 }

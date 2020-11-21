@@ -3,8 +3,6 @@ package core
 import (
 	"io"
 	"strings"
-
-	"github.com/polevpn/elog"
 )
 
 const (
@@ -79,9 +77,9 @@ func (t *TunIO) read() {
 		n, err := t.device.GetInterface().Read(pkt)
 		if err != nil {
 			if err == io.EOF || strings.Index(err.Error(), "file already closed") > -1 {
-				elog.Info("tun device closed")
+				plog.Info("tun device closed")
 			} else {
-				elog.Error("read pkg from tun fail", err)
+				plog.Error("read pkg from tun fail", err)
 			}
 			return
 		}
@@ -99,19 +97,19 @@ func (t *TunIO) write() {
 		select {
 		case pkt, ok := <-t.wch:
 			if !ok {
-				elog.Error("get pkt from write channel fail,maybe channel closed")
+				plog.Error("get pkt from write channel fail,maybe channel closed")
 				return
 			} else {
 				if pkt == nil {
-					elog.Info("exit write process")
+					plog.Info("exit write process")
 					return
 				}
 				_, err := t.device.GetInterface().Write(pkt)
 				if err != nil {
 					if err == io.EOF || strings.Index(err.Error(), "file already closed") > -1 {
-						elog.Info("tun device closed")
+						plog.Info("tun device closed")
 					} else {
-						elog.Error("tun write error", err)
+						plog.Error("tun write error", err)
 					}
 					return
 				}
@@ -123,7 +121,7 @@ func (t *TunIO) write() {
 func (t *TunIO) Enqueue(pkt []byte) {
 
 	if t.IsClosed() {
-		elog.Debug("tun device have been closed")
+		plog.Debug("tun device have been closed")
 		return
 	}
 

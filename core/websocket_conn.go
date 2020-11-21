@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/polevpn/elog"
 )
 
 const (
@@ -132,9 +131,9 @@ func (wsc *WebSocketConn) read() {
 		mtype, pkt, err := wsc.conn.ReadMessage()
 		if err != nil {
 			if err == io.EOF || strings.Index(err.Error(), "use of closed network connection") > -1 {
-				elog.Info(wsc.String(), "conn closed")
+				plog.Info(wsc.String(), "conn closed")
 			} else {
-				elog.Error(wsc.String(), "conn read exception:", err)
+				plog.Error(wsc.String(), "conn read exception:", err)
 			}
 			return
 		}
@@ -155,7 +154,7 @@ func (wsc *WebSocketConn) dispatch(pkt []byte) {
 	if ok {
 		handler(pkt, wsc)
 	} else {
-		elog.Error("invalid pkt cmd=", ppkt.Cmd())
+		plog.Error("invalid pkt cmd=", ppkt.Cmd())
 	}
 }
 
@@ -166,19 +165,19 @@ func (wsc *WebSocketConn) write() {
 		select {
 		case pkt, ok := <-wsc.wch:
 			if !ok {
-				elog.Error("get pkt from write channel fail,maybe channel closed")
+				plog.Error("get pkt from write channel fail,maybe channel closed")
 				return
 			} else {
 				if pkt == nil {
-					elog.Info("exit write process")
+					plog.Info("exit write process")
 					return
 				}
 				err := wsc.conn.WriteMessage(websocket.BinaryMessage, pkt)
 				if err != nil {
 					if err == io.EOF || err == io.ErrUnexpectedEOF {
-						elog.Info(wsc.String(), "conn closed")
+						plog.Info(wsc.String(), "conn closed")
 					} else {
-						elog.Error(wsc.String(), "conn write exception:", err)
+						plog.Error(wsc.String(), "conn write exception:", err)
 					}
 					return
 				}
@@ -189,7 +188,7 @@ func (wsc *WebSocketConn) write() {
 
 func (wsc *WebSocketConn) Send(pkt []byte) {
 	if wsc.IsClosed() == true {
-		elog.Debug("websocket connection is closed,can't send pkt")
+		plog.Debug("websocket connection is closed,can't send pkt")
 		return
 	}
 	if wsc.wch != nil {
