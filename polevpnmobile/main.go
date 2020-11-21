@@ -1,4 +1,4 @@
-package polevpnmoble
+package polevpnmobile
 
 import (
 	"sync"
@@ -35,7 +35,7 @@ type ReconnectedCallback interface {
 	OnEvent()
 }
 
-type PoleVpnMobile struct {
+type PoleVPN struct {
 	startCb        StartCallback
 	stopCb         StopCallback
 	errCb          ErrorCallback
@@ -48,15 +48,15 @@ type PoleVpnMobile struct {
 	state          int
 }
 
-func NewPoleVpnMobile() (*PoleVpnMobile, error) {
+func NewPoleVPN() (*PoleVPN, error) {
 	client, err := core.NewPoleVpnClient()
 	if err != nil {
 		return nil, err
 	}
-	return &PoleVpnMobile{client: client, mutex: &sync.Mutex{}, state: POLEVPN_MOBILE_INIT}, nil
+	return &PoleVPN{client: client, mutex: &sync.Mutex{}, state: POLEVPN_MOBILE_INIT}, nil
 }
 
-func (pvm *PoleVpnMobile) eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
+func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
 	switch event {
 	case core.CLIENT_EVENT_ADDRESS_ALLOCED:
 		{
@@ -99,13 +99,13 @@ func (pvm *PoleVpnMobile) eventHandler(event int, client *core.PoleVpnClient, av
 
 }
 
-func (pvm *PoleVpnMobile) Attach(fd int) {
+func (pvm *PoleVPN) Attach(fd int) {
 	tundevice := core.NewTunDevice()
 	tundevice.Attach(fd)
 	pvm.client.AttachTunDevice(tundevice)
 }
 
-func (pvm *PoleVpnMobile) Start(endpoint string, user string, pwd string, sni string) {
+func (pvm *PoleVPN) Start(endpoint string, user string, pwd string, sni string) {
 
 	pvm.mutex.Lock()
 	defer pvm.mutex.Unlock()
@@ -117,7 +117,7 @@ func (pvm *PoleVpnMobile) Start(endpoint string, user string, pwd string, sni st
 	go pvm.client.Start(endpoint, user, pwd, sni)
 }
 
-func (pvm *PoleVpnMobile) Stop() {
+func (pvm *PoleVPN) Stop() {
 	pvm.mutex.Lock()
 	defer pvm.mutex.Unlock()
 	if pvm.state == POLEVPN_MOBILE_STARTED {
@@ -127,26 +127,26 @@ func (pvm *PoleVpnMobile) Stop() {
 
 }
 
-func (pvm *PoleVpnMobile) SetRouteMode(mode bool) {
+func (pvm *PoleVPN) SetRouteMode(mode bool) {
 	pvm.client.SetRouteMode(mode)
 }
 
-func (pvm *PoleVpnMobile) SetStartCallback(startCb StartCallback) {
+func (pvm *PoleVPN) SetStartCallback(startCb StartCallback) {
 	pvm.startCb = startCb
 }
 
-func (pvm *PoleVpnMobile) SetStopCallback(stopCb StopCallback) {
+func (pvm *PoleVPN) SetStopCallback(stopCb StopCallback) {
 	pvm.stopCb = stopCb
 }
-func (pvm *PoleVpnMobile) SetErrorCallback(errCb ErrorCallback) {
+func (pvm *PoleVPN) SetErrorCallback(errCb ErrorCallback) {
 	pvm.errCb = errCb
 }
-func (pvm *PoleVpnMobile) SetReconnectingCallback(reconnectingCb ReconnectingCallback) {
+func (pvm *PoleVPN) SetReconnectingCallback(reconnectingCb ReconnectingCallback) {
 	pvm.reconnectingCb = reconnectingCb
 }
-func (pvm *PoleVpnMobile) SetReconnectedCallback(reconnectedCb ReconnectedCallback) {
+func (pvm *PoleVPN) SetReconnectedCallback(reconnectedCb ReconnectedCallback) {
 	pvm.reconnectedCb = reconnectedCb
 }
-func (pvm *PoleVpnMobile) SetAddressAllocCallback(addressAllocCb AddressAllocCallback) {
+func (pvm *PoleVPN) SetAddressAllocCallback(addressAllocCb AddressAllocCallback) {
 	pvm.addressAllocCb = addressAllocCb
 }

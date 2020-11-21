@@ -9,13 +9,15 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/polevpn/elog"
 )
 
 const (
-	CH_WEBSOCKET_WRITE_SIZE = 2048
+	CH_WEBSOCKET_WRITE_SIZE     = 2048
+	WEBSOCKET_HANDSHAKE_TIMEOUT = 5
 )
 
 var ErrIPNotExist = errors.New("reconnect ip is not exist")
@@ -54,8 +56,9 @@ func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip s
 	}
 
 	d := websocket.Dialer{
-		NetDialContext:  (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
-		TLSClientConfig: tlsconfig,
+		NetDialContext:   (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
+		TLSClientConfig:  tlsconfig,
+		HandshakeTimeout: time.Second * WEBSOCKET_HANDSHAKE_TIMEOUT,
 	}
 
 	conn, resp, err := d.Dial(endpoint+"?user="+url.QueryEscape(user)+"&pwd="+url.QueryEscape(pwd)+"&ip="+ip, nil)
