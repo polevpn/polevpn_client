@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/netstack/tcpip/header"
-	"github.com/google/netstack/tcpip/transport/icmp"
 	"github.com/polevpn/anyvalue"
 	"github.com/polevpn/elog"
 	"github.com/polevpn/geoip"
+	"github.com/polevpn/netstack/tcpip/header"
+	"github.com/polevpn/netstack/tcpip/transport/icmp"
 	"github.com/polevpn/netstack/tcpip/transport/tcp"
 	"github.com/polevpn/netstack/tcpip/transport/udp"
 	"golang.org/x/net/dns/dnsmessage"

@@ -51,14 +51,12 @@ type PoleVpnMobile struct {
 func NewPoleVpnMobile() (*PoleVpnMobile, error) {
 	client, err := core.NewPoleVpnClient()
 	if err != nil {
-		if pvm.errCb != nil {
-			pvm.errCb.OnEvent(err.Error())
-		}
+		return nil, err
 	}
-	return &PoleVpnMobile{client: client, mutex: &sync.Mutex{}, state: POLEVPN_MOBILE_INIT}
+	return &PoleVpnMobile{client: client, mutex: &sync.Mutex{}, state: POLEVPN_MOBILE_INIT}, nil
 }
 
-func (pvm *PoleVpnMobile) eventHandler(int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
+func (pvm *PoleVpnMobile) eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
 	switch event {
 	case core.CLIENT_EVENT_ADDRESS_ALLOCED:
 		{
@@ -116,7 +114,7 @@ func (pvm *PoleVpnMobile) Start(endpoint string, user string, pwd string, sni st
 	}
 	pvm.state = POLEVPN_MOBILE_STARTING
 	pvm.client.SetEventHandler(pvm.eventHandler)
-	go pvm.client.Start()
+	go pvm.client.Start(endpoint, user, pwd, sni)
 }
 
 func (pvm *PoleVpnMobile) Stop() {

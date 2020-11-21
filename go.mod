@@ -3,7 +3,6 @@ module github.com/polevpn/poleclient
 go 1.14
 
 require (
-	github.com/google/netstack v0.0.0-20191123085552-55fcc16cd0eb
 	github.com/gorilla/websocket v1.4.2
 	github.com/polevpn/anyvalue v1.0.3
 	github.com/polevpn/elog v1.0.3
