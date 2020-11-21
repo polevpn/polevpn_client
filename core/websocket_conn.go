@@ -72,6 +72,7 @@ func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip s
 				return ErrConnectUnknown
 			}
 		}
+		plog.Error("websocket connect fail,", err)
 		return ErrNetwork
 	}
 

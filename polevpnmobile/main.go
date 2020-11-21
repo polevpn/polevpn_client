@@ -111,13 +111,12 @@ func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyv
 		defer pvm.mutex.Unlock()
 		pvm.state = POLEVPN_MOBILE_STARTED
 	case core.CLIENT_EVENT_ERROR:
-		log.Debug()
-		log.Info("client error", av.Get("error").AsStr())
+		plog.Info("client error", av.Get("error").AsStr())
 		if pvm.errCb != nil {
 			pvm.errCb.OnEvent(av.Get("error").AsStr())
 		}
 	default:
-		log.Error("invalid evnet=", event)
+		plog.Error("invalid evnet=", event)
 	}
 
 }

@@ -31,6 +31,8 @@ github.com/polevpn/poleclient v0.0.0-20201121053115-c4c3b7935e4b h1:FiJMIV/O2tkC
 github.com/polevpn/poleclient v0.0.0-20201121053115-c4c3b7935e4b/go.mod h1:yHeJORfddAzWKnPffAESjCZvOGWJRwYyk7Jw455wMLc=
 github.com/polevpn/poleclient v0.0.0-20201121064311-c00b347f10c1 h1:zlEUocvLbwaLVLbr11TqsToNb9+/6tuIBj3X6Kccbvw=
 github.com/polevpn/poleclient v0.0.0-20201121064311-c00b347f10c1/go.mod h1:yHeJORfddAzWKnPffAESjCZvOGWJRwYyk7Jw455wMLc=
+github.com/polevpn/poleclient v0.0.0-20201121072843-1c003d8c3f65 h1:ahA+4rWGdVc9X2U+4gHXKOUu9E5GgOQKaI+OshrBlLo=
+github.com/polevpn/poleclient v0.0.0-20201121072843-1c003d8c3f65/go.mod h1:n3Xhn118JKdKU64hCiDniuPJtxszdQmWC6HmP5Y5TFg=
 github.com/polevpn/water v1.0.1 h1:Qy9EauklrHwkUxL9Wy+lmjVH1l/x8VW7wLn0IW9DipY=
 github.com/polevpn/water v1.0.1/go.mod h1:L41gnrOhprREWmwx5yONXP3ABrQ8CJqXvgvD+6B1DsE=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

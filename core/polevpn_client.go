@@ -132,7 +132,6 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 
 	err = pc.wsconn.Connect(endpoint, user, pwd, "", sni)
 	if err != nil {
-		plog.Error("websocket connect fail", err)
 		if pc.handler != nil {
 			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "websocket connet fail,"+err.Error()))
 		}
