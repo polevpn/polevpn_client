@@ -30,6 +30,7 @@ type WebSocketConn struct {
 	closed  bool
 	handler map[uint16]func(PolePacket, *WebSocketConn)
 	mutex   *sync.Mutex
+	localip string
 }
 
 func NewWebSocketConn() *WebSocketConn {
@@ -42,12 +43,20 @@ func NewWebSocketConn() *WebSocketConn {
 	}
 }
 
+func (wsc *WebSocketConn) SetLocalIP(ip string) {
+	wsc.localip = ip
+}
+
 func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip string, sni string) error {
 
-	// localip, err := GetLocalIp()
-	// if err != nil {
-	// 	return err
-	// }
+	localip := wsc.localip
+	var err error
+	if localip == "" {
+		localip, err = GetLocalIp()
+		if err != nil {
+			return err
+		}
+	}
 
 	tlsconfig := &tls.Config{
 		ServerName:         sni,
@@ -55,8 +64,7 @@ func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip s
 	}
 
 	d := websocket.Dialer{
-		//NetDialContext:   (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
-		NetDialContext:   (&net.Dialer{LocalAddr: nil}).DialContext,
+		NetDialContext:   (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
 		TLSClientConfig:  tlsconfig,
 		HandshakeTimeout: time.Second * WEBSOCKET_HANDSHAKE_TIMEOUT,
 	}

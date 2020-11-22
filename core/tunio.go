@@ -3,6 +3,7 @@ package core
 import (
 	"io"
 	"strings"
+	"sync"
 )
 
 const (
@@ -23,14 +24,17 @@ type TunIO struct {
 	mtu     int
 	handler func(pkt []byte)
 	closed  bool
+	size    int
+	mutex   *sync.Mutex
 }
 
 func NewTunIO(size int) *TunIO {
 
 	return &TunIO{
-		wch:    make(chan []byte, size),
-		closed: false,
+		closed: true,
 		mtu:    MTU,
+		size:   size,
+		mutex:  &sync.Mutex{},
 	}
 }
 
@@ -39,7 +43,10 @@ func (t *TunIO) SetPacketHandler(handler func(pkt []byte)) {
 }
 
 func (t *TunIO) AttachDevice(device *TunDevice) {
+
+	t.wch = make(chan []byte, t.size)
 	t.device = device
+	t.closed = false
 }
 
 func (t *TunIO) Close() error {
@@ -52,7 +59,11 @@ func (t *TunIO) Close() error {
 		close(t.wch)
 	}
 	t.closed = true
-	return t.device.Close()
+	var err error
+	if t.device != nil {
+		err = t.device.Close()
+	}
+	return err
 }
 
 func (t *TunIO) IsClosed() bool {

@@ -18,6 +18,8 @@ github.com/polevpn/elog v1.0.3 h1:f989+aTe5lPHKPC/U93Gu0J287eahDkV1TwpvW/xwu8=
 github.com/polevpn/elog v1.0.3/go.mod h1:u30sJGFE2hYV+KuEmE4Bw7Qh0J3eXS3AEXjyHtqPDjU=
 github.com/polevpn/elog v1.0.4 h1:8Z79UaNF6zKXdMShdzSOqtDJBl/HL6hDbERX7wziiZY=
 github.com/polevpn/elog v1.0.4/go.mod h1:u30sJGFE2hYV+KuEmE4Bw7Qh0J3eXS3AEXjyHtqPDjU=
+github.com/polevpn/elog v1.0.5 h1:N0cjc3k6X7nI09R9F09gw/fJWkCCb1/V1eUE+x3Ui1k=
+github.com/polevpn/elog v1.0.5/go.mod h1:u30sJGFE2hYV+KuEmE4Bw7Qh0J3eXS3AEXjyHtqPDjU=
 github.com/polevpn/geoip v1.0.0 h1:CxDOY45nHf49NytF4KWw2rwq2UNSeFABAZ/7J3udsGw=
 github.com/polevpn/geoip v1.0.0/go.mod h1:Ls6Kh9NMlwJJxqUQUpyzb5mBQzAiwvgmESQdIhdl0Sc=
 github.com/polevpn/netstack v1.0.6 h1:+ZZ+N5JzJSUa71bOAyad8YyPiWgc0kwoFAH/ODk3/Bc=
@@ -37,6 +39,8 @@ github.com/polevpn/poleclient v0.0.0-20201121073833-34b6f4f22705 h1:Uw3aE4lOBVwK
 github.com/polevpn/poleclient v0.0.0-20201121073833-34b6f4f22705/go.mod h1:n3Xhn118JKdKU64hCiDniuPJtxszdQmWC6HmP5Y5TFg=
 github.com/polevpn/poleclient v0.0.0-20201121074919-092307b3ab8e h1:9eZS5WRWozC1sbofmMbS6+pqh5u9ZWgz3oUX2lmsU30=
 github.com/polevpn/poleclient v0.0.0-20201121074919-092307b3ab8e/go.mod h1:n3Xhn118JKdKU64hCiDniuPJtxszdQmWC6HmP5Y5TFg=
+github.com/polevpn/poleclient v0.0.0-20201121080718-d6b5a70ada51 h1:ARjt+tF/d5Vo246lCR/4y0DmFh0fpHBU8DDpcHFeqak=
+github.com/polevpn/poleclient v0.0.0-20201121080718-d6b5a70ada51/go.mod h1:n3Xhn118JKdKU64hCiDniuPJtxszdQmWC6HmP5Y5TFg=
 github.com/polevpn/water v1.0.1 h1:Qy9EauklrHwkUxL9Wy+lmjVH1l/x8VW7wLn0IW9DipY=
 github.com/polevpn/water v1.0.1/go.mod h1:L41gnrOhprREWmwx5yONXP3ABrQ8CJqXvgvD+6B1DsE=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

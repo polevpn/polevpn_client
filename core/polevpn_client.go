@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -24,10 +25,12 @@ const (
 )
 
 const (
+	VERSION_IP_V4                = 4
+	VERSION_IP_V6                = 6
 	CH_TUN_DEVICE_WRITE_SIZE     = 2048
 	HEART_BEAT_INTERVAL          = 10
-	WEBSOCKET_RECONNECT_TIMES    = 12
-	WEBSOCKET_RECONNECT_INTERVAL = 10
+	WEBSOCKET_RECONNECT_TIMES    = 60
+	WEBSOCKET_RECONNECT_INTERVAL = 5
 	WEBSOCKET_NO_HEARTBEAT_TIMES = 4
 )
 
@@ -75,8 +78,6 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 
 	var err error
 
-	tunio := NewTunIO(CH_TUN_DEVICE_WRITE_SIZE)
-
 	wsconn := NewWebSocketConn()
 
 	forwarder, err := NewLocalForwarder()
@@ -87,7 +88,6 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 	}
 
 	client := &PoleVpnClient{
-		tunio:     tunio,
 		wsconn:    wsconn,
 		forwarder: forwarder,
 		state:     POLE_CLIENT_INIT,
@@ -99,6 +99,12 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 
 func (pc *PoleVpnClient) AttachTunDevice(device *TunDevice) {
 	pc.device = device
+	if pc.tunio != nil {
+		pc.tunio.Close()
+	}
+
+	pc.tunio = NewTunIO(CH_TUN_DEVICE_WRITE_SIZE)
+	pc.tunio.SetPacketHandler(pc.handleTunPacket)
 	pc.tunio.AttachDevice(device)
 	pc.tunio.StartProcess()
 }
@@ -144,7 +150,6 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 	pc.wsconn.SetHandler(CMD_HEART_BEAT, pc.handlerHeartBeatRespose)
 
 	pc.forwarder.SetPacketHandler(pc.handleForwarderPacket)
-	pc.tunio.SetPacketHandler(pc.handleTunPacket)
 
 	pc.wsconn.StartProcess()
 	pc.forwarder.StartProcess()
@@ -161,6 +166,15 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 	return nil
 }
 
+func (pc *PoleVpnClient) SetLocalIP(ip string) {
+	pc.forwarder.SetLocalIP(ip)
+	pc.wsconn.SetLocalIP(ip)
+}
+
+func (pc *PoleVpnClient) CloseConnect(flag bool) {
+	pc.wsconn.Close(flag)
+}
+
 func (pc *PoleVpnClient) WaitStop() {
 	pc.wg.Wait()
 }
@@ -170,6 +184,13 @@ func (pc *PoleVpnClient) handleForwarderPacket(pkt []byte) {
 }
 
 func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
+
+	version := pkt[0]
+	version = version >> 4
+
+	if version != VERSION_IP_V4 {
+		return
+	}
 
 	var err error
 	ipv4pkg := header.IPv4(pkt)
@@ -308,16 +329,29 @@ func (pc *PoleVpnClient) reconnect() {
 	success := false
 	for i := 0; i < WEBSOCKET_RECONNECT_TIMES; i++ {
 
+		if pc.state == POLE_CLIENT_CLOSED {
+			break
+		}
+
 		plog.Info("reconnecting")
 		if pc.handler != nil {
 			pc.handler(CLIENT_EVENT_RECONNECTING, pc, nil)
 		}
 		err := pc.wsconn.Connect(pc.endpoint, pc.user, pc.pwd, pc.allocip, pc.sni)
+
+		if pc.state == POLE_CLIENT_CLOSED {
+			break
+		}
+
 		if err != nil {
 			if err == ErrNetwork {
-				plog.Error("reconnect fail", err)
-				plog.Error("reconnect 10 seconds later")
-				time.Sleep(time.Second * WEBSOCKET_RECONNECT_INTERVAL)
+				if i < 10 {
+					time.Sleep(time.Second)
+					plog.Error("retry 1 seconds later")
+				} else {
+					time.Sleep(time.Second * WEBSOCKET_RECONNECT_INTERVAL)
+					plog.Error("retry " + strconv.Itoa(WEBSOCKET_RECONNECT_INTERVAL) + " seconds later")
+				}
 				continue
 			} else if err == ErrIPNotExist {
 				plog.Error("ip address expired,reconnect and request new")

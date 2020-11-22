@@ -60,7 +60,7 @@ func (lh *LogHandler) Write(data []byte) (int, error) {
 }
 
 func (lh *LogHandler) Flush() {
-
+	os.Stderr.Sync()
 }
 
 func init() {
@@ -68,6 +68,10 @@ func init() {
 	plog = elog.NewEasyLogger("INFO", false, 1, &LogHandler{})
 	core.SetLogger(plog)
 	defer plog.Flush()
+}
+
+func SetLogLevel(level string) {
+	plog.SetLogLevel(level)
 }
 
 func NewPoleVPN() (*PoleVPN, error) {
@@ -96,8 +100,8 @@ func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyv
 			pvm.state = POLEVPN_MOBILE_STOPPED
 		}
 	case core.CLIENT_EVENT_RECONNECTED:
-		if pvm.reconnectingCb != nil {
-			pvm.reconnectingCb.OnEvent()
+		if pvm.reconnectedCb != nil {
+			pvm.reconnectedCb.OnEvent()
 		}
 	case core.CLIENT_EVENT_RECONNECTING:
 		if pvm.reconnectingCb != nil {
@@ -149,8 +153,16 @@ func (pvm *PoleVPN) Stop() {
 
 }
 
+func (pvm *PoleVPN) SetLocalIP(ip string) {
+	pvm.client.SetLocalIP(ip)
+}
+
 func (pvm *PoleVPN) SetRouteMode(mode bool) {
 	pvm.client.SetRouteMode(mode)
+}
+
+func (pvm *PoleVPN) CloseConnect(flag bool) {
+	pvm.client.CloseConnect(flag)
 }
 
 func (pvm *PoleVPN) SetStartCallback(startCb StartCallback) {

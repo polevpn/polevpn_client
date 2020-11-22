@@ -26,6 +26,10 @@ const (
 	FORWARD_CH_WRITE_SIZE    = 2048
 	UDP_MAX_BUFFER_SIZE      = 8192
 	TCP_MAX_BUFFER_SIZE      = 8192
+	UDP_READ_BUFFER_SIZE     = 131072
+	UDP_WRITE_BUFFER_SIZE    = 65536
+	TCP_READ_BUFFER_SIZE     = 131072
+	TCP_WRITE_BUFFER_SIZE    = 65536
 	UDP_CONNECTION_IDLE_TIME = 1
 	CH_WRITE_SIZE            = 1024
 	TCP_CONNECT_TIMEOUT      = 10
@@ -37,6 +41,7 @@ type LocalForwarder struct {
 	wq      *waiter.Queue
 	closed  bool
 	handler func([]byte)
+	localip string
 }
 
 func NewLocalForwarder() (*LocalForwarder, error) {
@@ -109,6 +114,10 @@ func (lf *LocalForwarder) SetPacketHandler(handler func([]byte)) {
 	lf.handler = handler
 }
 
+func (lf *LocalForwarder) SetLocalIP(ip string) {
+	lf.localip = ip
+}
+
 func (lf *LocalForwarder) Write(pkg []byte) {
 	if lf.closed {
 		return
@@ -162,18 +171,22 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 
 	plog.Debug(r.ID(), "tcp connect")
 
-	// localip, err1 := GetLocalIp()
-	// if err1 != nil {
-	// 	plog.Error("get local ip fail", err1)
-	// 	r.Complete(true)
-	// 	ep.Close()
-	// 	return
-	// }
+	localip := lf.localip
+	var err1 error
+	if localip == "" {
+		localip, err1 = GetLocalIp()
+		if err1 != nil {
+			plog.Error("get local ip fail", err1)
+			r.Complete(true)
+			ep.Close()
+			return
+		}
+	}
 
 	addr, _ := ep.GetLocalAddress()
-	//laddr, _ := net.ResolveTCPAddr("tcp4", localip+":0")
+	laddr, _ := net.ResolveTCPAddr("tcp4", localip+":0")
 	raddr := addr.Addr.String() + ":" + strconv.Itoa(int(addr.Port))
-	d := net.Dialer{Timeout: time.Second * TCP_CONNECT_TIMEOUT, LocalAddr: nil}
+	d := net.Dialer{Timeout: time.Second * TCP_CONNECT_TIMEOUT, LocalAddr: laddr}
 	conn, err1 := d.Dial("tcp4", raddr)
 	if err1 != nil {
 		plog.Println("conn dial error ", err1)
@@ -181,6 +194,13 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 		ep.Close()
 		return
 	}
+	tcpconn := conn.(*net.TCPConn)
+	tcpconn.SetNoDelay(true)
+	tcpconn.SetKeepAlive(true)
+	tcpconn.SetWriteBuffer(TCP_WRITE_BUFFER_SIZE)
+	tcpconn.SetReadBuffer(TCP_READ_BUFFER_SIZE)
+	tcpconn.SetKeepAlivePeriod(time.Second * 15)
+
 	go lf.tcpRead(r, wq, ep, conn)
 	go lf.tcpWrite(r, wq, ep, conn)
 }
@@ -292,21 +312,30 @@ func (lf *LocalForwarder) forwardUDP(r *udp.ForwarderRequest) {
 	}
 
 	plog.Debug(r.ID(), "udp connect")
-	// localip, err1 := GetLocalIp()
-	// if err1 != nil {
-	// 	plog.Error("get local ip fail", err1)
-	// 	return
-	// }
 
-	//laddr, _ := net.ResolveUDPAddr("udp4", localip+":0")
+	localip := lf.localip
+	var err1 error
+	if localip == "" {
+		localip, err1 = GetLocalIp()
+		if err1 != nil {
+			plog.Error("get local ip fail", err1)
+			ep.Close()
+			return
+		}
+	}
+
+	laddr, _ := net.ResolveUDPAddr("udp4", localip+":0")
 	raddr, _ := net.ResolveUDPAddr("udp4", r.ID().LocalAddress.To4().String()+":"+strconv.Itoa(int(r.ID().LocalPort)))
 
-	conn, err1 := net.DialUDP("udp4", nil, raddr)
+	conn, err1 := net.DialUDP("udp4", laddr, raddr)
 	if err1 != nil {
 		plog.Error("udp conn dial error ", err1)
 		ep.Close()
 		return
 	}
+
+	conn.SetReadBuffer(UDP_READ_BUFFER_SIZE)
+	conn.SetWriteBuffer(UDP_WRITE_BUFFER_SIZE)
 
 	timer := time.NewTicker(time.Minute)
 	addr := &tcpip.FullAddress{Addr: r.ID().RemoteAddress, Port: r.ID().RemotePort}
