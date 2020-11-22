@@ -1,2 +1,5 @@
+.DS_Store
+polevpnmobile/polevpnmobile-sources.jar
+polevpnmobile/polevpnmobile.aar
 *.log
 poleclient
