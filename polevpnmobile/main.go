@@ -17,55 +17,41 @@ const (
 	POLEVPN_MOBILE_STOPPING = 4
 )
 
-type StartCallback interface {
-	OnEvent()
-}
-type StopCallback interface {
-	OnEvent()
-}
-type ErrorCallback interface {
-	OnEvent(errtype string, errmsg string)
-}
-type AddressAllocCallback interface {
-	OnEvent(ip string, dns string)
-}
-type ReconnectingCallback interface {
-	OnEvent()
-}
-type ReconnectedCallback interface {
-	OnEvent()
+type PoleVPNEventHandler interface {
+	OnStartedEvent()
+	OnStoppedEvent()
+	OnErrorEvent(errtype string, errmsg string)
+	OnAllocEvent(ip string, dns string)
+	OnReconnectingEvent()
+	OnReconnectedEvent()
 }
 
 type PoleVPN struct {
-	startCb        StartCallback
-	stopCb         StopCallback
-	errCb          ErrorCallback
-	reconnectingCb ReconnectingCallback
-	reconnectedCb  ReconnectedCallback
-	addressAllocCb AddressAllocCallback
-	client         *core.PoleVpnClient
-	mutex          *sync.Mutex
-	mode           bool
-	state          int
+	handler PoleVPNEventHandler
+	client  *core.PoleVpnClient
+	mutex   *sync.Mutex
+	mode    bool
+	localip string
+	state   int
 }
 
 var plog *elog.EasyLogger
 
-type LogHandler struct {
+type logHandler struct {
 }
 
-func (lh *LogHandler) Write(data []byte) (int, error) {
+func (lh *logHandler) Write(data []byte) (int, error) {
 
 	return os.Stderr.Write(data)
 }
 
-func (lh *LogHandler) Flush() {
+func (lh *logHandler) Flush() {
 	os.Stderr.Sync()
 }
 
 func init() {
 
-	plog = elog.NewEasyLogger("INFO", false, 1, &LogHandler{})
+	plog = elog.NewEasyLogger("INFO", false, 1, &logHandler{})
 	core.SetLogger(plog)
 	defer plog.Flush()
 }
@@ -74,49 +60,42 @@ func SetLogLevel(level string) {
 	plog.SetLogLevel(level)
 }
 
-func NewPoleVPN() (*PoleVPN, error) {
-	client, err := core.NewPoleVpnClient()
-	if err != nil {
-		return nil, err
-	}
-	return &PoleVPN{client: client, mutex: &sync.Mutex{}, state: POLEVPN_MOBILE_INIT}, nil
+func NewPoleVPN() *PoleVPN {
+	return &PoleVPN{mutex: &sync.Mutex{}, state: POLEVPN_MOBILE_INIT}
 }
 
 func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
+
 	switch event {
 	case core.CLIENT_EVENT_ADDRESS_ALLOCED:
 		{
-			if pvm.addressAllocCb != nil {
-				pvm.addressAllocCb.OnEvent(av.Get("ip").AsStr(), av.Get("dns").AsStr())
+			if pvm.handler != nil {
+				pvm.handler.OnAllocEvent(av.Get("ip").AsStr(), av.Get("dns").AsStr())
 			}
 		}
 	case core.CLIENT_EVENT_STOPPED:
 		{
-			if pvm.startCb != nil {
-				pvm.stopCb.OnEvent()
+			if pvm.handler != nil {
+				pvm.handler.OnStoppedEvent()
 			}
-			pvm.mutex.Lock()
-			defer pvm.mutex.Unlock()
 			pvm.state = POLEVPN_MOBILE_STOPPED
 		}
 	case core.CLIENT_EVENT_RECONNECTED:
-		if pvm.reconnectedCb != nil {
-			pvm.reconnectedCb.OnEvent()
+		if pvm.handler != nil {
+			pvm.handler.OnReconnectedEvent()
 		}
 	case core.CLIENT_EVENT_RECONNECTING:
-		if pvm.reconnectingCb != nil {
-			pvm.reconnectingCb.OnEvent()
+		if pvm.handler != nil {
+			pvm.handler.OnReconnectingEvent()
 		}
 	case core.CLIENT_EVENT_STARTED:
-		if pvm.startCb != nil {
-			pvm.startCb.OnEvent()
+		if pvm.handler != nil {
+			pvm.handler.OnStartedEvent()
 		}
-		pvm.mutex.Lock()
-		defer pvm.mutex.Unlock()
 		pvm.state = POLEVPN_MOBILE_STARTED
 	case core.CLIENT_EVENT_ERROR:
-		if pvm.errCb != nil {
-			pvm.errCb.OnEvent(av.Get("type").AsStr(), av.Get("error").AsStr())
+		if pvm.handler != nil {
+			pvm.handler.OnErrorEvent(av.Get("type").AsStr(), av.Get("error").AsStr())
 		}
 	default:
 		plog.Error("invalid evnet=", event)
@@ -125,6 +104,9 @@ func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyv
 }
 
 func (pvm *PoleVPN) Attach(fd int) {
+	if pvm.state != POLEVPN_MOBILE_STARTED {
+		return
+	}
 	tundevice := core.NewTunDevice()
 	tundevice.Attach(fd)
 	pvm.client.AttachTunDevice(tundevice)
@@ -134,9 +116,19 @@ func (pvm *PoleVPN) Start(endpoint string, user string, pwd string, sni string) 
 
 	pvm.mutex.Lock()
 	defer pvm.mutex.Unlock()
-	if pvm.state != POLEVPN_MOBILE_INIT {
+	if pvm.state != POLEVPN_MOBILE_INIT && pvm.state != POLEVPN_MOBILE_STOPPED {
 		return
 	}
+	client, err := core.NewPoleVpnClient()
+	if err != nil {
+		if pvm.handler != nil {
+			pvm.handler.OnErrorEvent("start", err.Error())
+		}
+	}
+	client.SetLocalIP(pvm.localip)
+	client.SetRouteMode(pvm.mode)
+
+	pvm.client = client
 	pvm.state = POLEVPN_MOBILE_STARTING
 	pvm.client.SetEventHandler(pvm.eventHandler)
 	go pvm.client.Start(endpoint, user, pwd, sni)
@@ -145,7 +137,7 @@ func (pvm *PoleVPN) Start(endpoint string, user string, pwd string, sni string) 
 func (pvm *PoleVPN) Stop() {
 	pvm.mutex.Lock()
 	defer pvm.mutex.Unlock()
-	if pvm.state == POLEVPN_MOBILE_STARTED {
+	if pvm.state == POLEVPN_MOBILE_STARTED || pvm.state == POLEVPN_MOBILE_STARTING {
 		pvm.state = POLEVPN_MOBILE_STOPPING
 		go pvm.client.Stop()
 	}
@@ -153,33 +145,27 @@ func (pvm *PoleVPN) Stop() {
 }
 
 func (pvm *PoleVPN) SetLocalIP(ip string) {
-	pvm.client.SetLocalIP(ip)
+	if pvm.state == POLEVPN_MOBILE_STARTED || pvm.state == POLEVPN_MOBILE_STARTING {
+		pvm.client.SetLocalIP(ip)
+	}
+	pvm.localip = ip
 }
 
 func (pvm *PoleVPN) SetRouteMode(mode bool) {
-	pvm.client.SetRouteMode(mode)
+	if pvm.state == POLEVPN_MOBILE_STARTED || pvm.state == POLEVPN_MOBILE_STARTING {
+		pvm.client.SetRouteMode(mode)
+	}
+	pvm.mode = mode
 }
 
 func (pvm *PoleVPN) CloseConnect(flag bool) {
-	pvm.client.CloseConnect(flag)
+
+	if pvm.state == POLEVPN_MOBILE_STARTED {
+		pvm.client.CloseConnect(flag)
+	}
+
 }
 
-func (pvm *PoleVPN) SetStartCallback(startCb StartCallback) {
-	pvm.startCb = startCb
-}
-
-func (pvm *PoleVPN) SetStopCallback(stopCb StopCallback) {
-	pvm.stopCb = stopCb
-}
-func (pvm *PoleVPN) SetErrorCallback(errCb ErrorCallback) {
-	pvm.errCb = errCb
-}
-func (pvm *PoleVPN) SetReconnectingCallback(reconnectingCb ReconnectingCallback) {
-	pvm.reconnectingCb = reconnectingCb
-}
-func (pvm *PoleVPN) SetReconnectedCallback(reconnectedCb ReconnectedCallback) {
-	pvm.reconnectedCb = reconnectedCb
-}
-func (pvm *PoleVPN) SetAddressAllocCallback(addressAllocCb AddressAllocCallback) {
-	pvm.addressAllocCb = addressAllocCb
+func (pvm *PoleVPN) SetEventHandler(handler PoleVPNEventHandler) {
+	pvm.handler = handler
 }

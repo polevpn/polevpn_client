@@ -2,10 +2,8 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -235,7 +233,9 @@ func (lf *LocalForwarder) udpRead(r *udp.ForwarderRequest, ep tcpip.Endpoint, wq
 			} else {
 				_, err1 := conn.Write(pkt)
 				if err1 != nil {
-					plog.Error("conn write error", err1)
+					if err1 != io.EOF && strings.Index(err1.Error(), "use of closed network connection") < 0 {
+						plog.Info("udp conn write error", err1)
+					}
 					return
 				}
 			}
@@ -259,7 +259,7 @@ func (lf *LocalForwarder) udpRead(r *udp.ForwarderRequest, ep tcpip.Endpoint, wq
 					return
 				case <-timer.C:
 					if time.Now().Sub(lastTime) > time.Minute*UDP_CONNECTION_IDLE_TIME {
-						plog.Debug("udp connection expired,close it")
+						plog.Infof("udp %v connection expired,close it", r.ID())
 						timer.Stop()
 						return
 					} else {
@@ -267,7 +267,7 @@ func (lf *LocalForwarder) udpRead(r *udp.ForwarderRequest, ep tcpip.Endpoint, wq
 					}
 				}
 			} else if err != tcpip.ErrClosedForReceive && err != tcpip.ErrClosedForSend {
-				plog.Error("read from udp endpoint fail", err)
+				plog.Info("udp ep read fail,", err)
 			}
 			return
 		}
@@ -290,14 +290,14 @@ func (lf *LocalForwarder) udpWrite(r *udp.ForwarderRequest, ep tcpip.Endpoint, w
 
 		if err1 != nil {
 			if err1 != io.EOF && strings.Index(err1.Error(), "use of closed network connection") < 0 {
-				plog.Error("udp conn readfrom error ", err1)
+				plog.Info("udp conn read error,", err1)
 			}
 			return
 		}
 		udppkg1 := udppkg[:n]
 		_, _, err := ep.Write(tcpip.SlicePayload(udppkg1), tcpip.WriteOptions{To: addr})
 		if err != nil {
-			plog.Error("udp ep write data fail ", err)
+			plog.Info("udp ep write fail,", err)
 			return
 		}
 	}
@@ -307,7 +307,7 @@ func (lf *LocalForwarder) forwardUDP(r *udp.ForwarderRequest) {
 	wq := &waiter.Queue{}
 	ep, err := r.CreateEndpoint(wq)
 	if err != nil {
-		plog.Error("create endpint error", err)
+		plog.Error("create udp endpint error", err)
 		return
 	}
 
@@ -377,7 +377,9 @@ func (lf *LocalForwarder) tcpRead(r *tcp.ForwarderRequest, wq *waiter.Queue, ep 
 			} else {
 				_, err1 := conn.Write(pkt)
 				if err1 != nil {
-					plog.Error("conn write error", err1)
+					if err1 != io.EOF && strings.Index(err1.Error(), "use of closed network connection") < 0 {
+						plog.Infof("tcp %v conn write error,%v", r.ID(), err1)
+					}
 					return
 				}
 			}
@@ -399,16 +401,12 @@ func (lf *LocalForwarder) tcpRead(r *tcp.ForwarderRequest, wq *waiter.Queue, ep 
 				}
 
 			} else if err != tcpip.ErrClosedForReceive && err != tcpip.ErrClosedForSend {
-				plog.Error("endpoint read fail", err)
+				plog.Infof("tcp %v endpoint read fail,%v", r.ID(), err)
 			}
 			return
 		}
 		wch <- v
 	}
-}
-
-func typeof(v interface{}) {
-	fmt.Println(reflect.TypeOf(v))
 }
 
 func (lf *LocalForwarder) tcpWrite(r *tcp.ForwarderRequest, wq *waiter.Queue, ep tcpip.Endpoint, conn net.Conn) {
@@ -422,7 +420,7 @@ func (lf *LocalForwarder) tcpWrite(r *tcp.ForwarderRequest, wq *waiter.Queue, ep
 		n, err := conn.Read(buf)
 		if err != nil {
 			if err != io.EOF && strings.Index(err.Error(), "use of closed network connection") < 0 {
-				plog.Error("conn read error", err)
+				plog.Infof("tcp %v conn read error,%v", r.ID(), err)
 			}
 			break
 		}
