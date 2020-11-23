@@ -24,7 +24,7 @@ type StopCallback interface {
 	OnEvent()
 }
 type ErrorCallback interface {
-	OnEvent(msg string)
+	OnEvent(errtype string, errmsg string)
 }
 type AddressAllocCallback interface {
 	OnEvent(ip string, dns string)
@@ -115,9 +115,8 @@ func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyv
 		defer pvm.mutex.Unlock()
 		pvm.state = POLEVPN_MOBILE_STARTED
 	case core.CLIENT_EVENT_ERROR:
-		plog.Info("client error", av.Get("error").AsStr())
 		if pvm.errCb != nil {
-			pvm.errCb.OnEvent(av.Get("error").AsStr())
+			pvm.errCb.OnEvent(av.Get("type").AsStr(), av.Get("error").AsStr())
 		}
 	default:
 		plog.Error("invalid evnet=", event)

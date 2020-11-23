@@ -43,6 +43,13 @@ const (
 	CLIENT_EVENT_RECONNECTED     = 6
 )
 
+const (
+	ERROR_LOGIN   = "login"
+	ERROR_NETWORK = "network"
+	ERROR_UNKNOWN = "unknown"
+	ERROR_ALLOC   = "alloc"
+)
+
 var plog *elog.EasyLogger
 
 type PoleVpnClient struct {
@@ -124,7 +131,7 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 
 	if pc.state != POLE_CLIENT_INIT {
 		if pc.handler != nil {
-			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "client stoped or not init"))
+			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "client stoped or not init").Set("type", ERROR_UNKNOWN))
 		}
 		return errors.New("client stoped or not init")
 	}
@@ -138,8 +145,14 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 
 	err = pc.wsconn.Connect(endpoint, user, pwd, "", sni)
 	if err != nil {
-		if pc.handler != nil {
-			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "websocket connet fail,"+err.Error()))
+		if err == ErrLoginVerify {
+			if pc.handler != nil {
+				pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "user or password invalid").Set("type", ERROR_LOGIN))
+			}
+		} else {
+			if pc.handler != nil {
+				pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "websocket connet fail,"+err.Error()).Set("type", ERROR_NETWORK))
+			}
 		}
 		return err
 	}
@@ -287,8 +300,7 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 	if ip1 == "" {
 		plog.Error("alloc ip fail,stop client")
 		if pc.handler != nil {
-			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "alloc ip fail"))
-			return
+			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "alloc ip fail").Set("type", ERROR_ALLOC))
 		}
 		pc.Stop()
 		return
@@ -298,7 +310,6 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 
 	if pc.handler != nil {
 		pc.handler(CLIENT_EVENT_ADDRESS_ALLOCED, pc, av)
-		return
 	}
 }
 
@@ -379,7 +390,7 @@ func (pc *PoleVpnClient) reconnect() {
 	if success == false {
 		plog.Error("reconnet failed,stop client")
 		if pc.handler != nil {
-			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "reconnet failed"))
+			pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "reconnet failed").Set("type", ERROR_NETWORK))
 		}
 		pc.Stop()
 	}
@@ -425,8 +436,10 @@ func (pc *PoleVpnClient) Stop() {
 
 	pc.forwarder.Close()
 	pc.wsconn.Close(false)
-	pc.tunio.Close()
 
+	if pc.tunio != nil {
+		pc.tunio.Close()
+	}
 	pc.state = POLE_CLIENT_CLOSED
 
 	if pc.handler != nil {
