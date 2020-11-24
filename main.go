@@ -97,8 +97,10 @@ func main() {
 
 	if runtime.GOOS == "darwin" {
 		networkmgr = core.NewDarwinNetworkManager()
+	} else if runtime.GOOS == "linux" {
+		networkmgr = core.NewLinuxNetworkManager()
 	} else {
-		elog.Fatal("platform not support")
+		elog.Fatal("os platform not support")
 	}
 
 	device = core.NewTunDevice()
