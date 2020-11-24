@@ -30,7 +30,8 @@ const (
 	TCP_WRITE_BUFFER_SIZE    = 65536
 	UDP_CONNECTION_IDLE_TIME = 1
 	CH_WRITE_SIZE            = 1024
-	TCP_CONNECT_TIMEOUT      = 10
+	TCP_CONNECT_TIMEOUT      = 5
+	TCP_CONNECT_RETRY        = 3
 )
 
 type LocalForwarder struct {
@@ -184,14 +185,23 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 	addr, _ := ep.GetLocalAddress()
 	laddr, _ := net.ResolveTCPAddr("tcp4", localip+":0")
 	raddr := addr.Addr.String() + ":" + strconv.Itoa(int(addr.Port))
-	d := net.Dialer{Timeout: time.Second * TCP_CONNECT_TIMEOUT, LocalAddr: laddr}
-	conn, err1 := d.Dial("tcp4", raddr)
+	var conn net.Conn
+	for i := 0; i < TCP_CONNECT_RETRY; i++ {
+		d := net.Dialer{Timeout: time.Second * TCP_CONNECT_TIMEOUT, LocalAddr: laddr}
+		conn, err1 = d.Dial("tcp4", raddr)
+		if err1 != nil {
+			continue
+		}
+		break
+	}
+
 	if err1 != nil {
-		plog.Println("conn dial error ", err1)
+		plog.Println("conn dial fail,", err1)
 		r.Complete(true)
 		ep.Close()
 		return
 	}
+
 	tcpconn := conn.(*net.TCPConn)
 	tcpconn.SetNoDelay(true)
 	tcpconn.SetKeepAlive(true)

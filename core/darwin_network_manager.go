@@ -16,9 +16,9 @@ func NewDarwinNetworkManager() *DarwinNetworkManager {
 	return &DarwinNetworkManager{}
 }
 
-func (nm *DarwinNetworkManager) setIPAddressAndEnable(tundev string, ip1 string, ip2 string) error {
+func (nm *DarwinNetworkManager) setIPAddressAndEnable(tundev string, ip1 string) error {
 
-	out, err := exec.Command("bash", "-c", "ifconfig "+tundev+" "+ip1+" "+ip2+" up").Output()
+	out, err := exec.Command("bash", "-c", "ifconfig "+tundev+" "+ip1+" "+ip1+" up").Output()
 
 	if err != nil {
 		return errors.New(err.Error() + "," + string(out))
@@ -46,7 +46,7 @@ func (nm *DarwinNetworkManager) removeDnsServer(service string) error {
 	return nil
 }
 
-func (nm *DarwinNetworkManager) getNetSeriveDns() (string, string, error) {
+func (nm *DarwinNetworkManager) getNetServiceeDns() (string, string, error) {
 
 	out, err := exec.Command("bash", "-c", "networksetup -listallnetworkservices").Output()
 	if err != nil {
@@ -57,14 +57,28 @@ func (nm *DarwinNetworkManager) getNetSeriveDns() (string, string, error) {
 
 	for _, v := range a {
 		v = strings.Trim(string(v), " \n\r\t")
-		out, err := exec.Command("bash", "-c", "networksetup -getdnsservers \""+v+"\"").Output()
+
+		out, err := exec.Command("bash", "-c", "networksetup getinfo \""+v+"\"|grep \"IP address:\\W[1-9]\"").Output()
+		index := strings.Index(string(out), "IP address: ")
+		if err != nil || index == -1 {
+			continue
+		}
+
+		out = out[index+len("IP address: "):]
+		ip := net.ParseIP(strings.Trim(string(out), " \n\r\t"))
+
+		if ip == nil {
+			continue
+		}
+
+		out, err = exec.Command("bash", "-c", "networksetup -getdnsservers \""+v+"\"").Output()
 		if err != nil {
 			continue
 		} else {
 			dns := strings.Trim(string(out), " \n\r\t")
 			a := strings.Split(dns, "\n")
-			ip := net.ParseIP(a[0])
-			if ip == nil {
+			dnsip := net.ParseIP(a[0])
+			if dnsip == nil {
 				return v, "", nil
 			} else {
 				dns = strings.Replace(dns, "\n", " ", -1)
@@ -72,7 +86,7 @@ func (nm *DarwinNetworkManager) getNetSeriveDns() (string, string, error) {
 			}
 		}
 	}
-	return "", "", errors.New("no netservice have dns")
+	return "", "", errors.New("no net service have ip and dns")
 }
 
 func (nm *DarwinNetworkManager) addRoute(cidr string, gw string) error {
@@ -100,16 +114,14 @@ func (nm *DarwinNetworkManager) delRoute(cidr string) error {
 func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string) error {
 
 	var err error
-	ip := net.ParseIP(ip1).To4()
-	ip2 := net.IPv4(ip[0], ip[1], ip[2], ip[3]-1).To4().String()
 
-	plog.Infof("set tun device ip src ip:%v,dst ip:%v", ip1, ip2)
-	err = nm.setIPAddressAndEnable(device, ip1, ip2)
+	plog.Infof("set tun device ip as %v", ip1)
+	err = nm.setIPAddressAndEnable(device, ip1)
 	if err != nil {
 		return errors.New("set address fail," + err.Error())
 	}
 
-	nm.netservice, nm.sysdns, err = nm.getNetSeriveDns()
+	nm.netservice, nm.sysdns, err = nm.getNetServiceeDns()
 
 	plog.Infof("system network service:%v,dns:%v", nm.netservice, nm.sysdns)
 
@@ -127,9 +139,9 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string
 	routes := []string{"1/8", "2/7", "4/6", "8/5", "16/4", "32/3", "64/2", "128.0/1"}
 
 	for _, route := range routes {
-		plog.Info("add route ", route, "to", ip2)
+		plog.Info("add route ", route, "via", ip1)
 		nm.delRoute(route)
-		err = nm.addRoute(route, ip2)
+		err = nm.addRoute(route, ip1)
 		if err != nil {
 			return errors.New("add route fail," + err.Error())
 		}
@@ -139,9 +151,10 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string
 
 func (nm *DarwinNetworkManager) RestoreNetwork() {
 
+	plog.Infof("restore network service %v", nm.netservice)
 	nm.removeDnsServer(nm.netservice)
 	if nm.sysdns != "" {
-		plog.Infof("restore network service %v dns to %v", nm.netservice, nm.sysdns)
+		plog.Infof("set service %v dns to %v", nm.netservice, nm.sysdns)
 		nm.setDnsServer(nm.sysdns, nm.netservice)
 	}
 }
