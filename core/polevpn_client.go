@@ -47,6 +47,7 @@ const (
 	ERROR_LOGIN   = "login"
 	ERROR_NETWORK = "network"
 	ERROR_UNKNOWN = "unknown"
+	ERROR_IO      = "io"
 	ERROR_ALLOC   = "alloc"
 )
 
@@ -201,6 +202,11 @@ func (pc *PoleVpnClient) handleForwarderPacket(pkt []byte) {
 
 func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
 
+	if pkt == nil {
+		pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("type", ERROR_IO).Set("error", "tun device close exception"))
+		pc.Stop()
+		return
+	}
 	version := pkt[0]
 	version = version >> 4
 

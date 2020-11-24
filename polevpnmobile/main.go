@@ -159,6 +159,10 @@ func (pvm *PoleVPN) SetRouteMode(mode bool) {
 	pvm.mode = mode
 }
 
+func (pvm *PoleVPN) GetState() int {
+	return pvm.state
+}
+
 func (pvm *PoleVPN) CloseConnect(flag bool) {
 
 	if pvm.state == POLEVPN_MOBILE_STARTED {

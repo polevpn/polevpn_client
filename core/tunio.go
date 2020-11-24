@@ -78,6 +78,9 @@ func (t *TunIO) StartProcess() {
 func (t *TunIO) read() {
 
 	defer func() {
+		if t.closed == false {
+			t.handler(nil) //notify close exception
+		}
 		t.Close()
 	}()
 
@@ -103,6 +106,12 @@ func (t *TunIO) read() {
 }
 
 func (t *TunIO) write() {
+	defer func() {
+		if t.closed == false {
+			t.handler(nil) //notify close exception
+		}
+		t.Close()
+	}()
 	defer PanicHandler()
 	for {
 		select {
