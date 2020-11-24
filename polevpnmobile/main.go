@@ -124,6 +124,7 @@ func (pvm *PoleVPN) Start(endpoint string, user string, pwd string, sni string) 
 		if pvm.handler != nil {
 			pvm.handler.OnErrorEvent("start", err.Error())
 		}
+		return
 	}
 	client.SetLocalIP(pvm.localip)
 	client.SetRouteMode(pvm.mode)

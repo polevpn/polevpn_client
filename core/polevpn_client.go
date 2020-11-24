@@ -27,7 +27,7 @@ const (
 const (
 	VERSION_IP_V4                = 4
 	VERSION_IP_V6                = 6
-	CH_TUN_DEVICE_WRITE_SIZE     = 2048
+	TUN_DEVICE_CH_WRITE_SIZE     = 2048
 	HEART_BEAT_INTERVAL          = 10
 	WEBSOCKET_RECONNECT_TIMES    = 60
 	WEBSOCKET_RECONNECT_INTERVAL = 5
@@ -110,7 +110,7 @@ func (pc *PoleVpnClient) AttachTunDevice(device *TunDevice) {
 		pc.tunio.Close()
 	}
 
-	pc.tunio = NewTunIO(CH_TUN_DEVICE_WRITE_SIZE)
+	pc.tunio = NewTunIO(TUN_DEVICE_CH_WRITE_SIZE)
 	pc.tunio.SetPacketHandler(pc.handleTunPacket)
 	pc.tunio.AttachDevice(device)
 	pc.tunio.StartProcess()
