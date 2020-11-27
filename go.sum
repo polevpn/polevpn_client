@@ -30,6 +30,8 @@ github.com/polevpn/netstack v1.0.6 h1:+ZZ+N5JzJSUa71bOAyad8YyPiWgc0kwoFAH/ODk3/B
 github.com/polevpn/netstack v1.0.6/go.mod h1:bIZcO16BHlmfG7t56hqoXiodF2T3C+e+eUrdHypxrbc=
 github.com/polevpn/netstack v1.0.7 h1:HxPOha1gC7vAjPQ2boK5YpMpmVDzJxORxdWLPe+nxxk=
 github.com/polevpn/netstack v1.0.7/go.mod h1:bIZcO16BHlmfG7t56hqoXiodF2T3C+e+eUrdHypxrbc=
+github.com/polevpn/poleclient v0.0.0-20201124153423-4841719869e8 h1:B9wk5nE19bm+rsItun2SDrBd/c5QS9nF0LB5KEjxUkQ=
+github.com/polevpn/poleclient v0.0.0-20201124153423-4841719869e8/go.mod h1:Ah48zQpmGkDX0Bfgx4KOSRoWokgoc7JgyMG6Mtj22pc=
 github.com/polevpn/water v1.0.0/go.mod h1:L41gnrOhprREWmwx5yONXP3ABrQ8CJqXvgvD+6B1DsE=
 github.com/polevpn/water v1.0.1 h1:Qy9EauklrHwkUxL9Wy+lmjVH1l/x8VW7wLn0IW9DipY=
 github.com/polevpn/water v1.0.1/go.mod h1:L41gnrOhprREWmwx5yONXP3ABrQ8CJqXvgvD+6B1DsE=
