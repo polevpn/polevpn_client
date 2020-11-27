@@ -6,7 +6,7 @@ import (
 
 	"github.com/polevpn/anyvalue"
 	"github.com/polevpn/elog"
-	"github.com/polevpn/poleclient/core"
+	"github.com/polevpn/polevpn_client/core"
 )
 
 const (
