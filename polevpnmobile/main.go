@@ -75,10 +75,10 @@ func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyv
 		}
 	case core.CLIENT_EVENT_STOPPED:
 		{
+			pvm.state = POLEVPN_MOBILE_STOPPED
 			if pvm.handler != nil {
 				pvm.handler.OnStoppedEvent()
 			}
-			pvm.state = POLEVPN_MOBILE_STOPPED
 		}
 	case core.CLIENT_EVENT_RECONNECTED:
 		if pvm.handler != nil {
@@ -89,10 +89,10 @@ func (pvm *PoleVPN) eventHandler(event int, client *core.PoleVpnClient, av *anyv
 			pvm.handler.OnReconnectingEvent()
 		}
 	case core.CLIENT_EVENT_STARTED:
+		pvm.state = POLEVPN_MOBILE_STARTED
 		if pvm.handler != nil {
 			pvm.handler.OnStartedEvent()
 		}
-		pvm.state = POLEVPN_MOBILE_STARTED
 	case core.CLIENT_EVENT_ERROR:
 		if pvm.handler != nil {
 			pvm.handler.OnErrorEvent(av.Get("type").AsStr(), av.Get("error").AsStr())
