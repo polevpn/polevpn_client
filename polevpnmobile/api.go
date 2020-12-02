@@ -13,7 +13,6 @@ import (
 
 const (
 	HTTP_ERROR_NETWORK = 1000
-	HTTP_ERROR_SYSTEM  = 1001
 	HTTP_OK            = 0
 )
 
@@ -31,7 +30,7 @@ func GetSystemConfig(response ResponseEvent) {
 	originConfigEndpoint, err := core.AesDecrypt(configEndpoint, core.AesKey)
 
 	if err != nil {
-		response.OnResponse(HTTP_ERROR_SYSTEM, err.Error(), "")
+		response.OnResponse(HTTP_ERROR_NETWORK, err.Error(), "")
 		return
 	}
 
@@ -51,31 +50,30 @@ func GetSystemConfig(response ResponseEvent) {
 
 	encrypted, err := base64.StdEncoding.DecodeString(string(data))
 	if err != nil {
-		response.OnResponse(HTTP_ERROR_SYSTEM, err.Error(), "")
+		response.OnResponse(HTTP_ERROR_NETWORK, err.Error(), "")
 		return
 	}
 	origin, err := core.AesDecrypt(encrypted, core.AesKey)
 	if err != nil {
-		response.OnResponse(HTTP_ERROR_SYSTEM, err.Error(), "")
+		response.OnResponse(HTTP_ERROR_NETWORK, err.Error(), "")
 		return
 	}
 	response.OnResponse(HTTP_OK, "", string(origin))
 }
 
-func SetApiHost(host string) {
-	apiHost = host
-}
-
-func Api(api string, header string, reqBody string, response ResponseEvent) {
+func Api(host string, api string, header string, reqBody string, response ResponseEvent) {
 
 	go func() {
 
-		if apiHost == "" {
-			response.OnResponse(HTTP_ERROR_SYSTEM, "api host is empty", "")
+		encrypted, _ := base64.StdEncoding.DecodeString(host)
+		origin, _ := core.AesDecrypt(encrypted, core.AesKey)
+
+		if origin == nil {
+			response.OnResponse(HTTP_ERROR_NETWORK, "invalid host", "")
 			return
 		}
 
-		request, err := http.NewRequest("POST", apiHost+api, strings.NewReader(reqBody))
+		request, err := http.NewRequest("POST", string(origin)+api, strings.NewReader(reqBody))
 
 		if err != nil {
 			response.OnResponse(HTTP_ERROR_NETWORK, err.Error(), "")
@@ -119,7 +117,7 @@ func Api(api string, header string, reqBody string, response ResponseEvent) {
 		if resp.Header.Get("X-Encrypted") == "true" {
 			origin, err := core.AesDecrypt(data, core.AesKey)
 			if err != nil {
-				response.OnResponse(HTTP_ERROR_SYSTEM, err.Error(), "")
+				response.OnResponse(HTTP_ERROR_NETWORK, err.Error(), "")
 				return
 			}
 			response.OnResponse(HTTP_OK, "ok", string(origin))
