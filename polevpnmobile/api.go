@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/polevpn/anyvalue"
 	"github.com/polevpn/polevpn_client/core"
 )
 
 const (
 	HTTP_ERROR_NETWORK = 1000
+	HTTP_ERROR_SYSTEM  = 1001
 	HTTP_OK            = 0
 )
 
@@ -26,22 +26,18 @@ var client = &http.Client{}
 
 var configEndpoint = []byte{141, 116, 190, 44, 154, 39, 78, 125, 124, 48, 172, 194, 105, 232, 215, 81, 150, 121, 161, 71, 11, 198, 157, 103, 161, 9, 13, 143, 174, 238, 13, 216, 116, 200, 67, 0, 158, 152, 236, 28, 215, 149, 28, 206, 102, 208, 210, 204, 76, 170, 0, 134, 176, 146, 173, 187, 223, 249, 244, 166, 162, 77, 5, 17}
 
-func init() {
-	go initApiHost()
-}
-
-func initApiHost() {
+func GetSystemConfig(response ResponseEvent) {
 
 	originConfigEndpoint, err := core.AesDecrypt(configEndpoint, core.AesKey)
 
 	if err != nil {
-		plog.Info(err)
+		response.OnResponse(HTTP_ERROR_SYSTEM, err.Error(), "")
 		return
 	}
 
 	resp, err := http.Get(string(originConfigEndpoint))
 	if err != nil {
-		plog.Info(err)
+		response.OnResponse(HTTP_ERROR_NETWORK, err.Error(), "")
 		return
 	}
 	defer resp.Body.Close()
@@ -49,23 +45,21 @@ func initApiHost() {
 	data, err := ioutil.ReadAll(resp.Body)
 
 	if err != nil {
-		plog.Info(err)
+		response.OnResponse(HTTP_ERROR_NETWORK, err.Error(), "")
 		return
 	}
 
 	encrypted, err := base64.StdEncoding.DecodeString(string(data))
 	if err != nil {
-		plog.Info(err)
+		response.OnResponse(HTTP_ERROR_SYSTEM, err.Error(), "")
 		return
 	}
 	origin, err := core.AesDecrypt(encrypted, core.AesKey)
-
-	av, err := anyvalue.NewFromJson(origin)
 	if err != nil {
-		plog.Info(err)
+		response.OnResponse(HTTP_ERROR_SYSTEM, err.Error(), "")
 		return
 	}
-	apiHost = av.Get("api_host").GetIndex(0).AsStr()
+	response.OnResponse(HTTP_OK, "", string(origin))
 }
 
 func SetApiHost(host string) {
@@ -76,6 +70,11 @@ func Api(api string, header string, reqBody string, response ResponseEvent) {
 
 	go func() {
 
+		if apiHost == "" {
+			response.OnResponse(HTTP_ERROR_SYSTEM, "api host is empty", "")
+			return
+		}
+
 		request, err := http.NewRequest("POST", apiHost+api, strings.NewReader(reqBody))
 
 		if err != nil {
@@ -84,8 +83,6 @@ func Api(api string, header string, reqBody string, response ResponseEvent) {
 		}
 		var headers = map[string]string{}
 		json.Unmarshal([]byte(header), &headers)
-
-		plog.Infof("headers %v", headers)
 
 		for k, v := range headers {
 			request.Header.Add(k, v)
@@ -119,7 +116,16 @@ func Api(api string, header string, reqBody string, response ResponseEvent) {
 			return
 		}
 
-		response.OnResponse(HTTP_OK, "ok", string(data))
+		if resp.Header.Get("X-Encrypted") == "true" {
+			origin, err := core.AesDecrypt(data, core.AesKey)
+			if err != nil {
+				response.OnResponse(HTTP_ERROR_SYSTEM, err.Error(), "")
+				return
+			}
+			response.OnResponse(HTTP_OK, "ok", string(origin))
+		} else {
+			response.OnResponse(HTTP_OK, "ok", string(data))
+		}
 
 	}()
 }

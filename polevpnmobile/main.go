@@ -17,6 +17,8 @@ const (
 	POLEVPN_MOBILE_STOPPING = 4
 )
 
+var plog *elog.EasyLogger
+
 type PoleVPNEventHandler interface {
 	OnStartedEvent()
 	OnStoppedEvent()
@@ -34,8 +36,6 @@ type PoleVPN struct {
 	localip string
 	state   int
 }
-
-var plog *elog.EasyLogger
 
 type logHandler struct {
 }
