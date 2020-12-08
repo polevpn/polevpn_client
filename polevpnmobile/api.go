@@ -65,11 +65,16 @@ func Api(host string, api string, header string, reqBody string, response Respon
 
 	go func() {
 
+		if host == "" {
+			response.OnResponse(HTTP_ERROR_NETWORK, "invalid api host", "")
+			return
+		}
+
 		encrypted, _ := base64.StdEncoding.DecodeString(host)
 		origin, _ := core.AesDecrypt(encrypted, core.AesKey)
 
 		if origin == nil {
-			response.OnResponse(HTTP_ERROR_NETWORK, "invalid host", "")
+			response.OnResponse(HTTP_ERROR_NETWORK, "invalid api host", "")
 			return
 		}
 
@@ -106,7 +111,6 @@ func Api(host string, api string, header string, reqBody string, response Respon
 			response.OnResponse(ret, msg, "")
 			return
 		}
-
 		data, err := ioutil.ReadAll(resp.Body)
 
 		if err != nil {
@@ -114,7 +118,7 @@ func Api(host string, api string, header string, reqBody string, response Respon
 			return
 		}
 
-		if resp.Header.Get("X-Encrypted") == "true" {
+		if resp.Header.Get("X-Encrypted") == "True" {
 			origin, err := core.AesDecrypt(data, core.AesKey)
 			if err != nil {
 				response.OnResponse(HTTP_ERROR_NETWORK, err.Error(), "")

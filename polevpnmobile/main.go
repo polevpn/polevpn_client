@@ -1,6 +1,7 @@
 package polevpnmobile
 
 import (
+	"encoding/base64"
 	"os"
 	"sync"
 
@@ -28,6 +29,11 @@ type PoleVPNEventHandler interface {
 	OnReconnectedEvent()
 }
 
+type PoleVPNLogHandler interface {
+	OnWrite(data string)
+	OnFlush()
+}
+
 type PoleVPN struct {
 	handler PoleVPNEventHandler
 	client  *core.PoleVpnClient
@@ -40,13 +46,25 @@ type PoleVPN struct {
 type logHandler struct {
 }
 
+var externLogHandler PoleVPNLogHandler
+
 func (lh *logHandler) Write(data []byte) (int, error) {
 
-	return os.Stderr.Write(data)
+	if externLogHandler != nil {
+		externLogHandler.OnWrite(string(data))
+		return len(data), nil
+	} else {
+		return os.Stderr.Write(data)
+	}
 }
 
 func (lh *logHandler) Flush() {
-	os.Stderr.Sync()
+
+	if externLogHandler != nil {
+		externLogHandler.OnFlush()
+	} else {
+		os.Stderr.Sync()
+	}
 }
 
 func init() {
@@ -58,6 +76,10 @@ func init() {
 
 func SetLogLevel(level string) {
 	plog.SetLogLevel(level)
+}
+
+func SetLogHandler(handler PoleVPNLogHandler) {
+	externLogHandler = handler
 }
 
 func NewPoleVPN() *PoleVPN {
@@ -119,6 +141,17 @@ func (pvm *PoleVPN) Start(endpoint string, user string, pwd string, sni string) 
 	if pvm.state != POLEVPN_MOBILE_INIT && pvm.state != POLEVPN_MOBILE_STOPPED {
 		return
 	}
+
+	encrypted, _ := base64.StdEncoding.DecodeString(endpoint)
+	originEndpiont, _ := core.AesDecrypt(encrypted, core.AesKey)
+
+	if originEndpiont == nil {
+		if pvm.handler != nil {
+			pvm.handler.OnErrorEvent("start", "invalid endpoint")
+		}
+		return
+	}
+
 	client, err := core.NewPoleVpnClient()
 	if err != nil {
 		if pvm.handler != nil {
@@ -132,7 +165,7 @@ func (pvm *PoleVPN) Start(endpoint string, user string, pwd string, sni string) 
 	pvm.client = client
 	pvm.state = POLEVPN_MOBILE_STARTING
 	pvm.client.SetEventHandler(pvm.eventHandler)
-	go pvm.client.Start(endpoint, user, pwd, sni)
+	go pvm.client.Start(string(originEndpiont), user, pwd, sni)
 }
 
 func (pvm *PoleVPN) Stop() {

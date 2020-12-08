@@ -153,7 +153,6 @@ func (lf *LocalForwarder) Close() {
 	lf.closed = true
 
 	lf.wq.Notify(waiter.EventIn)
-	lf.s.Close()
 	time.Sleep(time.Millisecond * 100)
 	lf.ep.Close()
 }
@@ -165,6 +164,12 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 	if err != nil {
 		plog.Error("create tcp endpint error", err)
 		r.Complete(true)
+		return
+	}
+
+	if lf.closed {
+		r.Complete(true)
+		ep.Close()
 		return
 	}
 
@@ -318,6 +323,11 @@ func (lf *LocalForwarder) forwardUDP(r *udp.ForwarderRequest) {
 	ep, err := r.CreateEndpoint(wq)
 	if err != nil {
 		plog.Error("create udp endpint error", err)
+		return
+	}
+
+	if lf.closed {
+		ep.Close()
 		return
 	}
 
