@@ -51,11 +51,9 @@ func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip s
 
 	localip := wsc.localip
 	var err error
-	if localip == "" {
-		localip, err = GetLocalIp()
-		if err != nil {
-			return err
-		}
+	var laddr *net.TCPAddr
+	if localip != "" {
+		laddr, _ = net.ResolveTCPAddr("tcp4", localip+":0")
 	}
 
 	tlsconfig := &tls.Config{
@@ -64,7 +62,7 @@ func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip s
 	}
 
 	d := websocket.Dialer{
-		NetDialContext:   (&net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(localip)}}).DialContext,
+		NetDialContext:   (&net.Dialer{LocalAddr: laddr}).DialContext,
 		TLSClientConfig:  tlsconfig,
 		HandshakeTimeout: time.Second * WEBSOCKET_HANDSHAKE_TIMEOUT,
 	}

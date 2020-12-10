@@ -144,6 +144,10 @@ func (lf *LocalForwarder) StartProcess() {
 	go lf.read()
 }
 
+func (lf *LocalForwarder) ClearConnect() {
+	lf.wq.Notify(waiter.EventIn)
+}
+
 func (lf *LocalForwarder) Close() {
 	defer PanicHandler()
 
@@ -175,20 +179,15 @@ func (lf *LocalForwarder) forwardTCP(r *tcp.ForwarderRequest) {
 
 	plog.Debug(r.ID(), "tcp connect")
 
-	localip := lf.localip
 	var err1 error
-	if localip == "" {
-		localip, err1 = GetLocalIp()
-		if err1 != nil {
-			plog.Error("get local ip fail", err1)
-			r.Complete(true)
-			ep.Close()
-			return
-		}
+
+	localip := lf.localip
+	var laddr *net.TCPAddr
+	if localip != "" {
+		laddr, _ = net.ResolveTCPAddr("tcp4", localip+":0")
 	}
 
 	addr, _ := ep.GetLocalAddress()
-	laddr, _ := net.ResolveTCPAddr("tcp4", localip+":0")
 	raddr := addr.Addr.String() + ":" + strconv.Itoa(int(addr.Port))
 	var conn net.Conn
 	for i := 0; i < TCP_CONNECT_RETRY; i++ {
@@ -335,16 +334,11 @@ func (lf *LocalForwarder) forwardUDP(r *udp.ForwarderRequest) {
 
 	localip := lf.localip
 	var err1 error
-	if localip == "" {
-		localip, err1 = GetLocalIp()
-		if err1 != nil {
-			plog.Error("get local ip fail", err1)
-			ep.Close()
-			return
-		}
+	var laddr *net.UDPAddr
+	if localip != "" {
+		laddr, _ = net.ResolveUDPAddr("udp4", localip+":0")
 	}
 
-	laddr, _ := net.ResolveUDPAddr("udp4", localip+":0")
 	raddr, _ := net.ResolveUDPAddr("udp4", r.ID().LocalAddress.To4().String()+":"+strconv.Itoa(int(r.ID().LocalPort)))
 
 	conn, err1 := net.DialUDP("udp4", laddr, raddr)

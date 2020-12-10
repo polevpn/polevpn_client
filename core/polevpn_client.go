@@ -190,6 +190,7 @@ func (pc *PoleVpnClient) SetLocalIP(ip string) {
 
 func (pc *PoleVpnClient) CloseConnect(flag bool) {
 	pc.wsconn.Close(flag)
+	pc.forwarder.ClearConnect()
 }
 
 func (pc *PoleVpnClient) WaitStop() {

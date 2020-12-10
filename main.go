@@ -71,6 +71,8 @@ func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) 
 	case core.CLIENT_EVENT_RECONNECTED:
 		elog.Info("client reconnected")
 	case core.CLIENT_EVENT_RECONNECTING:
+		ip, _ := core.GetLocalIp()
+		client.SetLocalIP(ip)
 		elog.Info("client reconnecting")
 	case core.CLIENT_EVENT_STARTED:
 		elog.Info("client started")
@@ -110,11 +112,18 @@ func main() {
 		elog.Fatal("create device fail", err)
 	}
 
+	ip, err := core.GetLocalIp()
+
+	if err != nil {
+		elog.Fatal("get localip fail", err)
+	}
+
 	client, err := core.NewPoleVpnClient()
 
 	if err != nil {
 		elog.Fatal("new polevpn client fail", err)
 	}
+	client.SetLocalIP(ip)
 	client.SetEventHandler(eventHandler)
 	client.SetRouteMode(mode)
 	client.AttachTunDevice(device)
