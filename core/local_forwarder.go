@@ -303,7 +303,9 @@ func (lf *LocalForwarder) udpWrite(r *udp.ForwarderRequest, ep tcpip.Endpoint, w
 		n, err1 := conn.Read(udppkg)
 
 		if err1 != nil {
-			if err1 != io.EOF && strings.Index(err1.Error(), "use of closed network connection") < 0 {
+			if err1 != io.EOF &&
+				strings.Index(err1.Error(), "use of closed network connection") < 0 &&
+				strings.Index(err1.Error(), "connection refused") < 0 {
 				plog.Info("udp conn read error,", err1)
 			}
 			return
