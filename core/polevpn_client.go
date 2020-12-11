@@ -27,7 +27,7 @@ const (
 const (
 	VERSION_IP_V4                = 4
 	VERSION_IP_V6                = 6
-	TUN_DEVICE_CH_WRITE_SIZE     = 2048
+	TUN_DEVICE_CH_WRITE_SIZE     = 100
 	HEART_BEAT_INTERVAL          = 10
 	WEBSOCKET_RECONNECT_TIMES    = 60
 	WEBSOCKET_RECONNECT_INTERVAL = 5
@@ -62,7 +62,6 @@ type PoleVpnClient struct {
 	endpoint          string
 	user              string
 	pwd               string
-	sni               string
 	allocip           string
 	lasttimeHeartbeat time.Time
 	reconnecting      bool
@@ -125,7 +124,7 @@ func (pc *PoleVpnClient) SetRouteMode(mode bool) {
 	pc.mode = mode
 }
 
-func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni string) error {
+func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 
 	pc.mutex.Lock()
 	defer pc.mutex.Unlock()
@@ -140,11 +139,10 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string, sni str
 	pc.endpoint = endpoint
 	pc.user = user
 	pc.pwd = pwd
-	pc.sni = sni
 
 	var err error
 
-	err = pc.wsconn.Connect(endpoint, user, pwd, "", sni)
+	err = pc.wsconn.Connect(endpoint, user, pwd, "")
 	if err != nil {
 		if err == ErrLoginVerify {
 			if pc.handler != nil {
@@ -358,7 +356,7 @@ func (pc *PoleVpnClient) reconnect() {
 		if pc.handler != nil {
 			pc.handler(CLIENT_EVENT_RECONNECTING, pc, nil)
 		}
-		err := pc.wsconn.Connect(pc.endpoint, pc.user, pc.pwd, pc.allocip, pc.sni)
+		err := pc.wsconn.Connect(pc.endpoint, pc.user, pc.pwd, pc.allocip)
 
 		if pc.state == POLE_CLIENT_CLOSED {
 			break

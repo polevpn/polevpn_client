@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	CH_WEBSOCKET_WRITE_SIZE     = 2048
+	CH_WEBSOCKET_WRITE_SIZE     = 100
 	WEBSOCKET_HANDSHAKE_TIMEOUT = 5
 )
 
@@ -47,7 +47,7 @@ func (wsc *WebSocketConn) SetLocalIP(ip string) {
 	wsc.localip = ip
 }
 
-func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip string, sni string) error {
+func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip string) error {
 
 	localip := wsc.localip
 	var err error
@@ -57,7 +57,6 @@ func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip s
 	}
 
 	tlsconfig := &tls.Config{
-		ServerName:         sni,
 		InsecureSkipVerify: true,
 	}
 
