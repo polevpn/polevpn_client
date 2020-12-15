@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/polevpn/netstack/tcpip/transport/icmp"
 	"github.com/polevpn/netstack/tcpip/transport/tcp"
 	"github.com/polevpn/netstack/tcpip/transport/udp"
-	"golang.org/x/net/dns/dnsmessage"
+	"github.com/polevpn/xnet/dns/dnsmessage"
 )
 
 const (
@@ -29,8 +30,8 @@ const (
 	VERSION_IP_V6                = 6
 	TUN_DEVICE_CH_WRITE_SIZE     = 100
 	HEART_BEAT_INTERVAL          = 10
-	WEBSOCKET_RECONNECT_TIMES    = 60
-	WEBSOCKET_RECONNECT_INTERVAL = 5
+	RECONNECT_TIMES              = 60
+	RECONNECT_INTERVAL           = 5
 	WEBSOCKET_NO_HEARTBEAT_TIMES = 4
 )
 
@@ -55,7 +56,7 @@ var plog *elog.EasyLogger
 
 type PoleVpnClient struct {
 	tunio             *TunIO
-	wsconn            *WebSocketConn
+	conn              Conn
 	forwarder         *LocalForwarder
 	state             int
 	mutex             *sync.Mutex
@@ -63,6 +64,7 @@ type PoleVpnClient struct {
 	user              string
 	pwd               string
 	allocip           string
+	localip           string
 	lasttimeHeartbeat time.Time
 	reconnecting      bool
 	wg                *sync.WaitGroup
@@ -85,8 +87,6 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 
 	var err error
 
-	wsconn := NewWebSocketConn()
-
 	forwarder, err := NewLocalForwarder()
 
 	if err != nil {
@@ -95,7 +95,7 @@ func NewPoleVpnClient() (*PoleVpnClient, error) {
 	}
 
 	client := &PoleVpnClient{
-		wsconn:    wsconn,
+		conn:      nil,
 		forwarder: forwarder,
 		state:     POLE_CLIENT_INIT,
 		mutex:     &sync.Mutex{},
@@ -142,7 +142,16 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 
 	var err error
 
-	err = pc.wsconn.Connect(endpoint, user, pwd, "")
+	if strings.HasPrefix(endpoint, "wss://") || strings.HasPrefix(endpoint, "ws://") {
+		pc.conn = NewWebSocketConn()
+	} else if strings.HasPrefix(endpoint, "https://") || strings.HasPrefix(endpoint, "http://") {
+		pc.conn = NewHttp2Conn()
+	} else {
+		pc.conn = NewWebSocketConn()
+	}
+	pc.conn.SetLocalIP(pc.localip)
+
+	err = pc.conn.Connect(endpoint, user, pwd, "")
 	if err != nil {
 		if err == ErrLoginVerify {
 			if pc.handler != nil {
@@ -150,7 +159,7 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 			}
 		} else {
 			if pc.handler != nil {
-				pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "websocket connet fail,"+err.Error()).Set("type", ERROR_NETWORK))
+				pc.handler(CLIENT_EVENT_ERROR, pc, anyvalue.New().Set("error", "connet fail,"+err.Error()).Set("type", ERROR_NETWORK))
 			}
 		}
 		if pc.handler != nil {
@@ -159,14 +168,14 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 		return err
 	}
 
-	pc.wsconn.SetHandler(CMD_ALLOC_IPADDR, pc.handlerAllocAdressRespose)
-	pc.wsconn.SetHandler(CMD_S2C_IPDATA, pc.handlerIPDataResponse)
-	pc.wsconn.SetHandler(CMD_CLIENT_CLOSED, pc.handlerWSConnCloseEvent)
-	pc.wsconn.SetHandler(CMD_HEART_BEAT, pc.handlerHeartBeatRespose)
+	pc.conn.SetHandler(CMD_ALLOC_IPADDR, pc.handlerAllocAdressRespose)
+	pc.conn.SetHandler(CMD_S2C_IPDATA, pc.handlerIPDataResponse)
+	pc.conn.SetHandler(CMD_CLIENT_CLOSED, pc.handlerconnCloseEvent)
+	pc.conn.SetHandler(CMD_HEART_BEAT, pc.handlerHeartBeatRespose)
 
 	pc.forwarder.SetPacketHandler(pc.handleForwarderPacket)
 
-	pc.wsconn.StartProcess()
+	pc.conn.StartProcess()
 	pc.forwarder.StartProcess()
 
 	pc.AskAllocIPAddress()
@@ -183,11 +192,14 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 
 func (pc *PoleVpnClient) SetLocalIP(ip string) {
 	pc.forwarder.SetLocalIP(ip)
-	pc.wsconn.SetLocalIP(ip)
+	if pc.conn != nil {
+		pc.conn.SetLocalIP(ip)
+	}
+	pc.localip = ip
 }
 
 func (pc *PoleVpnClient) CloseConnect(flag bool) {
-	pc.wsconn.Close(flag)
+	pc.conn.Close(flag)
 	pc.forwarder.ClearConnect()
 }
 
@@ -260,7 +272,7 @@ func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
 	if direct {
 		pc.sendIPPacketToLocalForwarder(pkt)
 	} else {
-		pc.sendIPPacketToRemoteWSConn(pkt)
+		pc.sendIPPacketToRemoteConn(pkt)
 	}
 
 }
@@ -273,14 +285,15 @@ func (pc *PoleVpnClient) sendIPPacketToLocalForwarder(pkt []byte) {
 	}
 }
 
-func (pc *PoleVpnClient) sendIPPacketToRemoteWSConn(pkt []byte) {
+func (pc *PoleVpnClient) sendIPPacketToRemoteConn(pkt []byte) {
 
-	if pc.wsconn != nil {
+	if pc.conn != nil {
 		buf := make([]byte, POLE_PACKET_HEADER_LEN+len(pkt))
 		copy(buf[POLE_PACKET_HEADER_LEN:], pkt)
 		polepkt := PolePacket(buf)
 		polepkt.SetCmd(CMD_C2S_IPDATA)
-		pc.wsconn.Send(polepkt)
+		polepkt.SetLen(uint16(len(buf)))
+		pc.conn.Send(polepkt)
 	} else {
 		plog.Error("remote ws conn haven't set")
 	}
@@ -290,10 +303,11 @@ func (pc *PoleVpnClient) sendIPPacketToRemoteWSConn(pkt []byte) {
 func (pc *PoleVpnClient) AskAllocIPAddress() {
 	buf := make([]byte, POLE_PACKET_HEADER_LEN)
 	PolePacket(buf).SetCmd(CMD_ALLOC_IPADDR)
-	pc.wsconn.Send(buf)
+	PolePacket(buf).SetLen(POLE_PACKET_HEADER_LEN)
+	pc.conn.Send(buf)
 }
 
-func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocketConn) {
+func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, conn Conn) {
 
 	av, err := anyvalue.NewFromJson(pkt.Payload())
 
@@ -321,16 +335,16 @@ func (pc *PoleVpnClient) handlerAllocAdressRespose(pkt PolePacket, wsc *WebSocke
 	}
 }
 
-func (pc *PoleVpnClient) handlerHeartBeatRespose(pkt PolePacket, wsc *WebSocketConn) {
+func (pc *PoleVpnClient) handlerHeartBeatRespose(pkt PolePacket, conn Conn) {
 	plog.Debug("received heartbeat")
 	pc.lasttimeHeartbeat = time.Now()
 }
 
-func (pc *PoleVpnClient) handlerIPDataResponse(pkt PolePacket, wsc *WebSocketConn) {
+func (pc *PoleVpnClient) handlerIPDataResponse(pkt PolePacket, conn Conn) {
 	pc.tunio.Enqueue(pkt[POLE_PACKET_HEADER_LEN:])
 }
 
-func (pc *PoleVpnClient) handlerWSConnCloseEvent(pkt PolePacket, wsc *WebSocketConn) {
+func (pc *PoleVpnClient) handlerconnCloseEvent(pkt PolePacket, conn Conn) {
 	plog.Info("ws client closed,start reconnect")
 	pc.reconnect()
 }
@@ -338,7 +352,7 @@ func (pc *PoleVpnClient) handlerWSConnCloseEvent(pkt PolePacket, wsc *WebSocketC
 func (pc *PoleVpnClient) reconnect() {
 
 	if pc.reconnecting == true {
-		plog.Info("wsconn is reconnecting")
+		plog.Info("conn is reconnecting")
 		return
 	}
 
@@ -346,7 +360,7 @@ func (pc *PoleVpnClient) reconnect() {
 	pc.state = POLE_CLIENT_RECONNETING
 
 	success := false
-	for i := 0; i < WEBSOCKET_RECONNECT_TIMES; i++ {
+	for i := 0; i < RECONNECT_TIMES; i++ {
 
 		if pc.state == POLE_CLIENT_CLOSED {
 			break
@@ -356,7 +370,7 @@ func (pc *PoleVpnClient) reconnect() {
 		if pc.handler != nil {
 			pc.handler(CLIENT_EVENT_RECONNECTING, pc, nil)
 		}
-		err := pc.wsconn.Connect(pc.endpoint, pc.user, pc.pwd, pc.allocip)
+		err := pc.conn.Connect(pc.endpoint, pc.user, pc.pwd, pc.allocip)
 
 		if pc.state == POLE_CLIENT_CLOSED {
 			break
@@ -368,8 +382,8 @@ func (pc *PoleVpnClient) reconnect() {
 					time.Sleep(time.Second)
 					plog.Error("retry 1 seconds later")
 				} else {
-					time.Sleep(time.Second * WEBSOCKET_RECONNECT_INTERVAL)
-					plog.Error("retry " + strconv.Itoa(WEBSOCKET_RECONNECT_INTERVAL) + " seconds later")
+					time.Sleep(time.Second * RECONNECT_INTERVAL)
+					plog.Error("retry " + strconv.Itoa(RECONNECT_INTERVAL) + " seconds later")
 				}
 				continue
 			} else if err == ErrIPNotExist {
@@ -385,7 +399,7 @@ func (pc *PoleVpnClient) reconnect() {
 			if pc.allocip == "" {
 				pc.AskAllocIPAddress()
 			}
-			pc.wsconn.StartProcess()
+			pc.conn.StartProcess()
 			pc.SendHeartBeat()
 			success = true
 			pc.state = POLE_CLIENT_RUNING
@@ -408,7 +422,8 @@ func (pc *PoleVpnClient) reconnect() {
 func (pc *PoleVpnClient) SendHeartBeat() {
 	buf := make([]byte, POLE_PACKET_HEADER_LEN)
 	PolePacket(buf).SetCmd(CMD_HEART_BEAT)
-	pc.wsconn.Send(buf)
+	PolePacket(buf).SetLen(POLE_PACKET_HEADER_LEN)
+	pc.conn.Send(buf)
 }
 
 func (pc *PoleVpnClient) HeartBeat() {
@@ -423,7 +438,7 @@ func (pc *PoleVpnClient) HeartBeat() {
 		timeNow := time.Now()
 		if timeNow.Sub(pc.lasttimeHeartbeat) > time.Second*HEART_BEAT_INTERVAL*WEBSOCKET_NO_HEARTBEAT_TIMES {
 			plog.Error("have not recevied heartbeat for", WEBSOCKET_NO_HEARTBEAT_TIMES, "times,close connection and reconnet")
-			pc.wsconn.Close(true)
+			pc.conn.Close(true)
 			pc.lasttimeHeartbeat = timeNow
 			continue
 		}
@@ -443,7 +458,10 @@ func (pc *PoleVpnClient) Stop() {
 	}
 
 	pc.forwarder.Close()
-	pc.wsconn.Close(false)
+
+	if pc.conn != nil {
+		pc.conn.Close(false)
+	}
 
 	if pc.tunio != nil {
 		pc.tunio.Close()

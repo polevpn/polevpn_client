@@ -28,7 +28,7 @@ type WebSocketConn struct {
 	conn    *websocket.Conn
 	wch     chan []byte
 	closed  bool
-	handler map[uint16]func(PolePacket, *WebSocketConn)
+	handler map[uint16]func(PolePacket, Conn)
 	mutex   *sync.Mutex
 	localip string
 }
@@ -38,7 +38,7 @@ func NewWebSocketConn() *WebSocketConn {
 		conn:    nil,
 		closed:  true,
 		wch:     nil,
-		handler: make(map[uint16]func(PolePacket, *WebSocketConn)),
+		handler: make(map[uint16]func(PolePacket, Conn)),
 		mutex:   &sync.Mutex{},
 	}
 }
@@ -123,7 +123,7 @@ func (wsc *WebSocketConn) IsClosed() bool {
 	return wsc.closed
 }
 
-func (wsc *WebSocketConn) SetHandler(cmd uint16, handler func(PolePacket, *WebSocketConn)) {
+func (wsc *WebSocketConn) SetHandler(cmd uint16, handler func(PolePacket, Conn)) {
 	wsc.handler[cmd] = handler
 }
 
