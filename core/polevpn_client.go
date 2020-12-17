@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -71,6 +72,7 @@ type PoleVpnClient struct {
 	mode              bool
 	device            *TunDevice
 	handler           func(int, *PoleVpnClient, *anyvalue.AnyValue)
+	host              string
 }
 
 func init() {
@@ -142,12 +144,22 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 
 	var err error
 
+	u, err := url.Parse(endpoint)
+
+	pc.host = u.Host
+
 	if strings.HasPrefix(endpoint, "wss://") || strings.HasPrefix(endpoint, "ws://") {
 		pc.conn = NewWebSocketConn()
-	} else if strings.HasPrefix(endpoint, "https://") || strings.HasPrefix(endpoint, "http://") {
+	} else if strings.HasPrefix(endpoint, "h2s://") || strings.HasPrefix(endpoint, "h2://") {
+		if strings.HasPrefix(endpoint, "h2s://") {
+			endpoint = strings.Replace(endpoint, "h2s://", "https://", -1)
+		}
+		if strings.HasPrefix(endpoint, "h2://") {
+			endpoint = strings.Replace(endpoint, "h2://", "http://", -1)
+		}
 		pc.conn = NewHttp2Conn()
 	} else {
-		pc.conn = NewWebSocketConn()
+		pc.conn = NewHttpConn()
 	}
 	pc.conn.SetLocalIP(pc.localip)
 
@@ -228,6 +240,7 @@ func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
 	var err error
 	ipv4pkg := header.IPv4(pkt)
 	direct := false
+	self := false
 	if ipv4pkg.Protocol() == uint8(icmp.ProtocolNumber4) {
 		if geoip.QueryCountryByIP(net.IP(ipv4pkg.DestinationAddress().To4())) == "CN" {
 			direct = true
@@ -252,6 +265,9 @@ func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
 						plog.Debugf("DNS CN DOMAIN %v", name)
 						direct = true
 					}
+					if name == pc.host {
+						self = true
+					}
 				}
 			}
 		} else {
@@ -267,6 +283,10 @@ func (pc *PoleVpnClient) handleTunPacket(pkt []byte) {
 
 	if pc.mode {
 		direct = false
+	}
+
+	if self {
+		direct = true
 	}
 
 	if direct {
