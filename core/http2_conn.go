@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polevpn/elog"
 	"github.com/polevpn/h2conn"
 	"github.com/polevpn/xnet/http2"
 )
@@ -150,18 +149,32 @@ func (h2c *Http2Conn) read() {
 	defer PanicHandler()
 
 	for {
+		var preOffset = 0
+
 		prefetch := make([]byte, 2)
-		_, err := h2c.conn.Read(prefetch)
-		if err != nil {
-			if err == io.EOF || strings.Index(err.Error(), "use of closed network connection") > -1 {
-				elog.Info(h2c.String(), "conn closed")
-			} else {
-				elog.Error(h2c.String(), "conn read exception:", err)
+
+		for {
+			n, err := h2c.conn.Read(prefetch[preOffset:])
+			if err != nil {
+				if err == io.EOF || strings.Index(err.Error(), "use of closed network connection") > -1 {
+					plog.Info(h2c.String(), "conn closed")
+				} else {
+					plog.Error(h2c.String(), "conn read exception:", err)
+				}
+				return
 			}
-			return
+			preOffset += n
+			if preOffset >= 2 {
+				break
+			}
 		}
 
 		len := binary.BigEndian.Uint16(prefetch)
+
+		if len < POLE_PACKET_HEADER_LEN {
+			plog.Error("invalid packet len")
+			continue
+		}
 
 		pkt := make([]byte, len)
 		copy(pkt, prefetch)
@@ -170,9 +183,9 @@ func (h2c *Http2Conn) read() {
 			n, err := h2c.conn.Read(pkt[offset:])
 			if err != nil {
 				if err == io.EOF || strings.Index(err.Error(), "use of closed network connection") > -1 {
-					elog.Info(h2c.String(), "conn closed")
+					plog.Info(h2c.String(), "conn closed")
 				} else {
-					elog.Error(h2c.String(), "conn read exception:", err)
+					plog.Error(h2c.String(), "conn read exception:", err)
 				}
 				return
 			}

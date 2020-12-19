@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-
-	"github.com/polevpn/elog"
 )
 
 const (
@@ -102,6 +100,7 @@ func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string)
 			writer.Close()
 			return
 		}
+		req.ContentLength = 10 * 1024 * 1024 * 1024
 		_, err = d.Do(req)
 		if err != nil {
 			plog.Error("http connect fail,", err)
@@ -184,18 +183,32 @@ func (hc *HttpConn) read() {
 	defer PanicHandler()
 
 	for {
+		var preOffset = 0
+
 		prefetch := make([]byte, 2)
-		_, err := hc.reader.Read(prefetch)
-		if err != nil {
-			if err == io.EOF || strings.Index(err.Error(), "use of closed network connection") > -1 {
-				elog.Info(hc.String(), "conn closed")
-			} else {
-				elog.Error(hc.String(), "conn read exception:", err)
+
+		for {
+			n, err := hc.reader.Read(prefetch[preOffset:])
+			if err != nil {
+				if err == io.EOF || strings.Index(err.Error(), "use of closed network connection") > -1 {
+					plog.Info(hc.String(), "conn closed")
+				} else {
+					plog.Error(hc.String(), "conn read exception:", err)
+				}
+				return
 			}
-			return
+			preOffset += n
+			if preOffset >= 2 {
+				break
+			}
 		}
 
 		len := binary.BigEndian.Uint16(prefetch)
+
+		if len < POLE_PACKET_HEADER_LEN {
+			plog.Error("invalid packet len")
+			continue
+		}
 
 		pkt := make([]byte, len)
 		copy(pkt, prefetch)
@@ -204,9 +217,9 @@ func (hc *HttpConn) read() {
 			n, err := hc.reader.Read(pkt[offset:])
 			if err != nil {
 				if err == io.EOF || strings.Index(err.Error(), "use of closed network connection") > -1 {
-					elog.Info(hc.String(), "conn closed")
+					plog.Info(hc.String(), "conn closed")
 				} else {
-					elog.Error(hc.String(), "conn read exception:", err)
+					plog.Error(hc.String(), "conn read exception:", err)
 				}
 				return
 			}

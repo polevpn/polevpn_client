@@ -33,7 +33,7 @@ const (
 	HEART_BEAT_INTERVAL          = 10
 	RECONNECT_TIMES              = 60
 	RECONNECT_INTERVAL           = 5
-	WEBSOCKET_NO_HEARTBEAT_TIMES = 4
+	WEBSOCKET_NO_HEARTBEAT_TIMES = 3
 )
 
 const (
@@ -138,7 +138,6 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 		return errors.New("client stoped or not init")
 	}
 
-	pc.endpoint = endpoint
 	pc.user = user
 	pc.pwd = pwd
 
@@ -158,10 +157,15 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 			endpoint = strings.Replace(endpoint, "h2://", "http://", -1)
 		}
 		pc.conn = NewHttp2Conn()
+	} else if strings.HasPrefix(endpoint, "kcp://") {
+		endpoint = strings.Replace(endpoint, "kcp://", "", -1)
+		pc.conn = NewKCPConn()
 	} else {
 		pc.conn = NewHttpConn()
 	}
+
 	pc.conn.SetLocalIP(pc.localip)
+	pc.endpoint = endpoint
 
 	err = pc.conn.Connect(endpoint, user, pwd, "")
 	if err != nil {
@@ -182,7 +186,7 @@ func (pc *PoleVpnClient) Start(endpoint string, user string, pwd string) error {
 
 	pc.conn.SetHandler(CMD_ALLOC_IPADDR, pc.handlerAllocAdressRespose)
 	pc.conn.SetHandler(CMD_S2C_IPDATA, pc.handlerIPDataResponse)
-	pc.conn.SetHandler(CMD_CLIENT_CLOSED, pc.handlerconnCloseEvent)
+	pc.conn.SetHandler(CMD_CLIENT_CLOSED, pc.handlerConnCloseEvent)
 	pc.conn.SetHandler(CMD_HEART_BEAT, pc.handlerHeartBeatRespose)
 
 	pc.forwarder.SetPacketHandler(pc.handleForwarderPacket)
@@ -364,8 +368,8 @@ func (pc *PoleVpnClient) handlerIPDataResponse(pkt PolePacket, conn Conn) {
 	pc.tunio.Enqueue(pkt[POLE_PACKET_HEADER_LEN:])
 }
 
-func (pc *PoleVpnClient) handlerconnCloseEvent(pkt PolePacket, conn Conn) {
-	plog.Info("ws client closed,start reconnect")
+func (pc *PoleVpnClient) handlerConnCloseEvent(pkt PolePacket, conn Conn) {
+	plog.Info("client closed,start reconnect")
 	pc.reconnect()
 }
 
