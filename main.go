@@ -18,6 +18,7 @@ var user string
 var pwd string
 var sni string
 var mode bool
+var plog *elog.EasyLogger
 
 func init() {
 	flag.StringVar(&endpoint, "e", "", "server connect to")
@@ -25,6 +26,7 @@ func init() {
 	flag.StringVar(&pwd, "p", "", "login password")
 	flag.StringVar(&sni, "s", "www.apple.com", "fake domain")
 	flag.BoolVar(&mode, "m", false, "global route mode")
+	plog = elog.GetLogger()
 }
 
 func signalHandler(pc *core.PoleVpnClient) {
@@ -35,11 +37,11 @@ func signalHandler(pc *core.PoleVpnClient) {
 		for s := range c {
 			switch s {
 			case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
-				elog.Info("receive exit signal,exit")
+				plog.Info("receive exit signal,exit")
 				if pc != nil {
 					pc.Stop()
 				}
-				elog.Flush()
+				plog.Flush()
 				os.Exit(0)
 			case syscall.SIGUSR1:
 			case syscall.SIGUSR2:
@@ -59,27 +61,27 @@ func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) 
 		{
 			err := networkmgr.SetNetwork(device.GetInterface().Name(), av.Get("ip").AsStr(), av.Get("dns").AsStr())
 			if err != nil {
-				elog.Error("set network fail,", err)
+				plog.Error("set network fail,", err)
 				client.Stop()
 			}
 		}
 	case core.CLIENT_EVENT_STOPPED:
 		{
-			elog.Info("client stoped")
+			plog.Info("client stoped")
 			networkmgr.RestoreNetwork()
 		}
 	case core.CLIENT_EVENT_RECONNECTED:
-		elog.Info("client reconnected")
+		plog.Info("client reconnected")
 	case core.CLIENT_EVENT_RECONNECTING:
 		ip, _ := core.GetLocalIp()
 		client.SetLocalIP(ip)
-		elog.Info("client reconnecting")
+		plog.Info("client reconnecting")
 	case core.CLIENT_EVENT_STARTED:
-		elog.Info("client started")
+		plog.Info("client started")
 	case core.CLIENT_EVENT_ERROR:
-		elog.Info("client error", av.Get("error").AsStr())
+		plog.Info("client error", av.Get("error").AsStr())
 	default:
-		elog.Error("invalid evnet=", event)
+		plog.Error("invalid evnet=", event)
 	}
 
 }
@@ -87,13 +89,13 @@ func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) 
 func main() {
 
 	flag.Parse()
-	defer elog.Flush()
+	defer plog.Flush()
 
 	go func() {
 		for range time.NewTicker(time.Second * 15).C {
 			m := runtime.MemStats{}
 			runtime.ReadMemStats(&m)
-			elog.Printf("mem=%v,go=%v", m.HeapAlloc, runtime.NumGoroutine())
+			plog.Printf("mem=%v,go=%v", m.HeapAlloc, runtime.NumGoroutine())
 		}
 	}()
 
@@ -102,26 +104,26 @@ func main() {
 	} else if runtime.GOOS == "linux" {
 		networkmgr = core.NewLinuxNetworkManager()
 	} else {
-		elog.Fatal("os platform not support")
+		plog.Fatal("os platform not support")
 	}
 
 	device = core.NewTunDevice()
 	err := device.Create()
 
 	if err != nil {
-		elog.Fatal("create device fail", err)
+		plog.Fatal("create device fail", err)
 	}
 
 	ip, err := core.GetLocalIp()
 
 	if err != nil {
-		elog.Fatal("get localip fail", err)
+		plog.Fatal("get localip fail", err)
 	}
 
 	client, err := core.NewPoleVpnClient()
 
 	if err != nil {
-		elog.Fatal("new polevpn client fail", err)
+		plog.Fatal("new polevpn client fail", err)
 	}
 	client.SetLocalIP(ip)
 	client.SetEventHandler(eventHandler)
@@ -130,7 +132,7 @@ func main() {
 
 	err = client.Start(endpoint, user, pwd)
 	if err != nil {
-		elog.Fatal("start polevpn client fail", err)
+		plog.Fatal("start polevpn client fail", err)
 	}
 
 	signalHandler(client)

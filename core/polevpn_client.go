@@ -29,7 +29,7 @@ const (
 const (
 	VERSION_IP_V4                = 4
 	VERSION_IP_V6                = 6
-	TUN_DEVICE_CH_WRITE_SIZE     = 100
+	TUN_DEVICE_CH_WRITE_SIZE     = 2048
 	HEART_BEAT_INTERVAL          = 10
 	RECONNECT_TIMES              = 60
 	RECONNECT_INTERVAL           = 5

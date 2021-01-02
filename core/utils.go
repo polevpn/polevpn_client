@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"runtime/debug"
-	"strings"
 )
 
 func PanicHandler() {
@@ -28,23 +27,6 @@ func PanicHandlerExit() {
 }
 
 func GetLocalIp() (string, error) {
-
-	name, err := os.Hostname()
-
-	if err != nil {
-		return "", err
-	}
-
-	ipList, err := net.LookupHost(name)
-	if err != nil {
-		return "", err
-	}
-
-	for _, ip := range ipList {
-		if !strings.HasPrefix(ip, "127.") && !strings.Contains(ip, "::") {
-			return ip, nil
-		}
-	}
 
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {

@@ -1,0 +1,1 @@
+gomobile bind -target=ios/amd64,ios/arm64 -work -v

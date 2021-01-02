@@ -85,10 +85,13 @@ func (h2c *Http2Conn) Connect(endpoint string, user string, pwd string, ip strin
 	if err != nil {
 		if resp != nil {
 			if resp.StatusCode == http.StatusBadRequest {
+				resp.Body.Close()
 				return ErrIPNotExist
 			} else if resp.StatusCode == http.StatusForbidden {
+				resp.Body.Close()
 				return ErrLoginVerify
 			} else {
+				resp.Body.Close()
 				return ErrConnectUnknown
 			}
 		}

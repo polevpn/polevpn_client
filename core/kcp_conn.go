@@ -123,19 +123,23 @@ func (kc *KCPConn) Connect(endpoint string, user string, pwd string, ip string) 
 
 	pkt, err := kc.getAuthRequest(user, pwd, ip)
 	if err != nil {
+		conn.Close()
 		return err
 	}
-	_, err = conn.Write([]byte(pkt))
+
+	conn.Write([]byte(pkt))
 
 	rpkt, err := kc.readAuthResponse(conn)
 
 	if err != nil {
+		conn.Close()
 		return err
 	}
 
 	av, err := anyvalue.NewFromJson(rpkt.Payload())
 
 	if err != nil {
+		conn.Close()
 		return err
 	}
 
@@ -143,10 +147,13 @@ func (kc *KCPConn) Connect(endpoint string, user string, pwd string, ip string) 
 
 	if ret != 0 {
 		if ret == 400 {
+			conn.Close()
 			return ErrIPNotExist
 		} else if ret == 403 {
+			conn.Close()
 			return ErrLoginVerify
 		} else {
+			conn.Close()
 			return ErrConnectUnknown
 		}
 	}

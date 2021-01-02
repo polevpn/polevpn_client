@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -59,7 +60,7 @@ func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string)
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
-
+	d.Timeout = time.Second * HTTP_HANDSHAKE_TIMEOUT
 	req, err := http.NewRequest("PUT", endpoint+"?user="+url.QueryEscape(user)+"&pwd="+url.QueryEscape(pwd)+"&ip="+ip, nil)
 	if err != nil {
 		plog.Error("http connect fail,", err)
@@ -73,10 +74,13 @@ func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string)
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusBadRequest {
+			resp.Body.Close()
 			return ErrIPNotExist
 		} else if resp.StatusCode == http.StatusForbidden {
+			resp.Body.Close()
 			return ErrLoginVerify
 		} else {
+			resp.Body.Close()
 			return ErrConnectUnknown
 		}
 	}
@@ -84,6 +88,7 @@ func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string)
 	data, err := ioutil.ReadAll(resp.Body)
 
 	if err != nil {
+		resp.Body.Close()
 		plog.Error("http connect fail,", err)
 		return ErrNetwork
 	}
@@ -92,6 +97,8 @@ func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string)
 	streamId := string(data)
 
 	reader, writer := io.Pipe()
+
+	d.Timeout = 0
 
 	go func() {
 		req, err = http.NewRequest("POST", endpoint+"?stream="+streamId, reader)
@@ -103,7 +110,7 @@ func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string)
 		req.ContentLength = 10 * 1024 * 1024 * 1024
 		_, err = d.Do(req)
 		if err != nil {
-			plog.Error("http connect fail,", err)
+			plog.Error("http writer exit")
 		}
 	}()
 

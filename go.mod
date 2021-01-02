@@ -12,5 +12,4 @@ require (
 	github.com/polevpn/netstack v1.10.1
 	github.com/polevpn/water v1.0.1
 	github.com/polevpn/xnet v1.0.0
-	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
 )
