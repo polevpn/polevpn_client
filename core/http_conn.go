@@ -43,7 +43,7 @@ func (hc *HttpConn) SetLocalIP(ip string) {
 	hc.localip = ip
 }
 
-func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string) error {
+func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string, sni string) error {
 
 	localip := hc.localip
 	var err error
@@ -56,8 +56,11 @@ func (hc *HttpConn) Connect(endpoint string, user string, pwd string, ip string)
 
 	d = &http.Client{
 		Transport: &http.Transport{
-			DialContext:     (&net.Dialer{LocalAddr: laddr}).DialContext,
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			DialContext: (&net.Dialer{LocalAddr: laddr}).DialContext,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+				ServerName:         sni,
+			},
 		},
 	}
 	d.Timeout = time.Second * HTTP_HANDSHAKE_TIMEOUT

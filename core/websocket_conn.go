@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -15,8 +16,10 @@ import (
 )
 
 const (
-	CH_WEBSOCKET_WRITE_SIZE     = 100
-	WEBSOCKET_HANDSHAKE_TIMEOUT = 5
+	CH_WEBSOCKET_WRITE_SIZE         = 100
+	WEBSOCKET_HANDSHAKE_TIMEOUT     = 5
+	WEBSOCKET_TCP_WRITE_BUFFER_SIZE = 524288
+	WEBSOCKET_TCP_READ_BUFFER_SIZE  = 524288
 )
 
 var ErrIPNotExist = errors.New("reconnect ip is not exist")
@@ -47,7 +50,7 @@ func (wsc *WebSocketConn) SetLocalIP(ip string) {
 	wsc.localip = ip
 }
 
-func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip string) error {
+func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip string, sni string) error {
 
 	localip := wsc.localip
 	var err error
@@ -58,12 +61,29 @@ func (wsc *WebSocketConn) Connect(endpoint string, user string, pwd string, ip s
 
 	tlsconfig := &tls.Config{
 		InsecureSkipVerify: true,
+		ServerName:         sni,
+	}
+
+	netDialer := net.Dialer{LocalAddr: laddr}
+
+	netDialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := netDialer.DialContext(ctx, network, addr)
+		if err == nil {
+			tcpconn := conn.(*net.TCPConn)
+			tcpconn.SetNoDelay(true)
+			tcpconn.SetKeepAlive(true)
+			tcpconn.SetWriteBuffer(WEBSOCKET_TCP_WRITE_BUFFER_SIZE)
+			tcpconn.SetReadBuffer(WEBSOCKET_TCP_READ_BUFFER_SIZE)
+			tcpconn.SetKeepAlivePeriod(time.Second * 15)
+		}
+		return conn, err
 	}
 
 	d := websocket.Dialer{
-		NetDialContext:   (&net.Dialer{LocalAddr: laddr}).DialContext,
-		TLSClientConfig:  tlsconfig,
-		HandshakeTimeout: time.Second * WEBSOCKET_HANDSHAKE_TIMEOUT,
+		NetDialContext:    netDialContext,
+		TLSClientConfig:   tlsconfig,
+		HandshakeTimeout:  time.Second * WEBSOCKET_HANDSHAKE_TIMEOUT,
+		EnableCompression: false,
 	}
 
 	conn, resp, err := d.Dial(endpoint+"?user="+url.QueryEscape(user)+"&pwd="+url.QueryEscape(pwd)+"&ip="+ip, nil)

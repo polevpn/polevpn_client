@@ -130,7 +130,7 @@ func main() {
 	client.SetRouteMode(mode)
 	client.AttachTunDevice(device)
 
-	err = client.Start(endpoint, user, pwd)
+	err = client.Start(endpoint, user, pwd, sni)
 	if err != nil {
 		plog.Fatal("start polevpn client fail", err)
 	}

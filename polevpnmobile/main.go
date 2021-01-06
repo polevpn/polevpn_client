@@ -134,7 +134,7 @@ func (pvm *PoleVPN) Attach(fd int) {
 	pvm.client.AttachTunDevice(tundevice)
 }
 
-func (pvm *PoleVPN) Start(endpoint string, user string, pwd string) {
+func (pvm *PoleVPN) Start(endpoint string, user string, pwd string, sni string) {
 
 	pvm.mutex.Lock()
 	defer pvm.mutex.Unlock()
@@ -165,7 +165,7 @@ func (pvm *PoleVPN) Start(endpoint string, user string, pwd string) {
 	pvm.client = client
 	pvm.state = POLEVPN_MOBILE_STARTING
 	pvm.client.SetEventHandler(pvm.eventHandler)
-	go pvm.client.Start(string(originEndpiont), user, pwd)
+	go pvm.client.Start(string(originEndpiont), user, pwd, sni)
 }
 
 func (pvm *PoleVPN) Stop() {

@@ -18,7 +18,7 @@ const (
 	KCP_HANDSHAKE_TIMEOUT = 5
 	KCP_MTU               = 1350
 	KCP_RECV_WINDOW       = 512
-	KCP_SEND_WINDOW       = 128
+	KCP_SEND_WINDOW       = 512
 	KCP_READ_BUFFER       = 4194304
 	KCP_WRITE_BUFFER      = 4194304
 )
@@ -99,7 +99,7 @@ func (kc *KCPConn) readAuthResponse(conn *kcp.UDPSession) (PolePacket, error) {
 	return ppkt, nil
 }
 
-func (kc *KCPConn) Connect(endpoint string, user string, pwd string, ip string) error {
+func (kc *KCPConn) Connect(endpoint string, user string, pwd string, ip string, sni string) error {
 
 	localip := kc.localip
 	var laddr *net.UDPAddr

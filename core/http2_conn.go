@@ -44,7 +44,7 @@ func (h2c *Http2Conn) SetLocalIP(ip string) {
 	h2c.localip = ip
 }
 
-func (h2c *Http2Conn) Connect(endpoint string, user string, pwd string, ip string) error {
+func (h2c *Http2Conn) Connect(endpoint string, user string, pwd string, ip string, sni string) error {
 
 	localip := h2c.localip
 	var err error
@@ -62,7 +62,10 @@ func (h2c *Http2Conn) Connect(endpoint string, user string, pwd string, ip strin
 					DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
 						return tls.DialWithDialer(&dailer, network, addr, cfg)
 					},
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true,
+						ServerName:         sni,
+					},
 				},
 			},
 		}
