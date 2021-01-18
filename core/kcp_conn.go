@@ -17,8 +17,8 @@ const (
 	CH_KCP_WRITE_SIZE     = 100
 	KCP_HANDSHAKE_TIMEOUT = 5
 	KCP_MTU               = 1350
-	KCP_RECV_WINDOW       = 512
-	KCP_SEND_WINDOW       = 512
+	KCP_RECV_WINDOW       = 2048
+	KCP_SEND_WINDOW       = 2048
 	KCP_READ_BUFFER       = 4194304
 	KCP_WRITE_BUFFER      = 4194304
 )
@@ -115,6 +115,7 @@ func (kc *KCPConn) Connect(endpoint string, user string, pwd string, ip string, 
 	conn.SetMtu(KCP_MTU)
 	conn.SetACKNoDelay(true)
 	conn.SetStreamMode(true)
+	conn.SetWriteDelay(false)
 	conn.SetNoDelay(1, 10, 2, 1)
 	conn.SetWindowSize(KCP_SEND_WINDOW, KCP_RECV_WINDOW)
 	conn.SetReadBuffer(KCP_READ_BUFFER)
