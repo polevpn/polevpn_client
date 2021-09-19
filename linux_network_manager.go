@@ -1,4 +1,4 @@
-package core
+package main
 
 import (
 	"errors"
@@ -67,37 +67,20 @@ func (nm *LinuxNetworkManager) delRoute(cidr string) error {
 
 }
 
-func (nm *LinuxNetworkManager) SetNetwork(device string, ip1 string, dns string) error {
+func (nm *LinuxNetworkManager) SetNetwork(device string, gateway string, remoteIp string, dns string, routes []string) error {
 
 	var err error
 
-	plog.Infof("set tun device ip as %v", ip1)
-	err = nm.setIPAddressAndEnable(device, ip1)
+	plog.Infof("set tun device ip as %v", gateway)
+	err = nm.setIPAddressAndEnable(device, gateway)
 	if err != nil {
 		return errors.New("set address fail," + err.Error())
 	}
 
-	// nm.netservice, nm.sysdns, err = nm.getNetServiceeDns()
-
-	// plog.Infof("system network service:%v,dns:%v", nm.netservice, nm.sysdns)
-
-	// if err != nil {
-	// 	return errors.New("get system dns server fail," + err.Error())
-	// }
-
-	// plog.Infof("change network service %v dns to %v", nm.netservice, dns)
-	// err = nm.setDnsServer(dns, nm.netservice)
-
-	// if err != nil {
-	// 	return errors.New("set dns server fail," + err.Error())
-	// }
-
-	routes := []string{"1/8", "2/7", "4/6", "8/5", "16/4", "32/3", "64/2", "128.0/1"}
-
 	for _, route := range routes {
-		plog.Info("add route ", route, "via", ip1)
+		plog.Info("add route ", route, "via", gateway)
 		nm.delRoute(route)
-		err = nm.addRoute(route, ip1)
+		err = nm.addRoute(route, gateway)
 		if err != nil {
 			return errors.New("add route fail," + err.Error())
 		}

@@ -1,4 +1,4 @@
-package core
+package main
 
 import (
 	"errors"
@@ -8,8 +8,11 @@ import (
 )
 
 type DarwinNetworkManager struct {
-	sysdns     string
-	netservice string
+	sysdns         string
+	netservice     string
+	defaultGateway string
+	remoteIp       string
+	gateway        string
 }
 
 func NewDarwinNetworkManager() *DarwinNetworkManager {
@@ -46,6 +49,16 @@ func (nm *DarwinNetworkManager) removeDnsServer(service string) error {
 	return nil
 }
 
+func (nm *DarwinNetworkManager) getDefaultGateway() (string, error) {
+	out, err := exec.Command("bash", "-c", "route -n get default |grep gateway").Output()
+	if err != nil {
+		return "", err
+	}
+
+	gateway := strings.Replace(string(out), "gateway: ", "", -1)
+	return strings.Trim(gateway, " \n\r\t"), nil
+}
+
 func (nm *DarwinNetworkManager) getNetServiceeDns() (string, string, error) {
 
 	out, err := exec.Command("bash", "-c", "networksetup -listallnetworkservices").Output()
@@ -58,16 +71,16 @@ func (nm *DarwinNetworkManager) getNetServiceeDns() (string, string, error) {
 	for _, v := range a {
 		v = strings.Trim(string(v), " \n\r\t")
 
-		out, err := exec.Command("bash", "-c", "networksetup getinfo \""+v+"\"|grep \"IP address:\\W[1-9]\"").Output()
-		index := strings.Index(string(out), "IP address: ")
-		if err != nil || index == -1 {
+		out, err := exec.Command("bash", "-c", "networksetup getinfo \""+v+"\"|grep \"Router:\\W[1-9]\"").Output()
+
+		if err != nil {
 			continue
 		}
 
-		out = out[index+len("IP address: "):]
-		ip := net.ParseIP(strings.Trim(string(out), " \n\r\t"))
+		router := strings.Replace(string(out), "Router: ", "", -1)
+		router = strings.Trim(router, " \n\r\t")
 
-		if ip == nil {
+		if router != nm.defaultGateway {
 			continue
 		}
 
@@ -111,12 +124,20 @@ func (nm *DarwinNetworkManager) delRoute(cidr string) error {
 
 }
 
-func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string) error {
+func (nm *DarwinNetworkManager) SetNetwork(device string, gateway string, remoteIp string, dns string, routes []string) error {
+
+	nm.gateway = gateway
+	nm.remoteIp = remoteIp
 
 	var err error
 
-	plog.Infof("set tun device ip as %v", ip1)
-	err = nm.setIPAddressAndEnable(device, ip1)
+	nm.defaultGateway, err = nm.getDefaultGateway()
+	if err != nil {
+		return err
+	}
+
+	plog.Infof("set tun device ip as %v", gateway)
+	err = nm.setIPAddressAndEnable(device, gateway)
 	if err != nil {
 		return errors.New("set address fail," + err.Error())
 	}
@@ -136,12 +157,15 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string
 		return errors.New("set dns server fail," + err.Error())
 	}
 
-	routes := []string{"1/8", "2/7", "4/6", "8/5", "16/4", "32/3", "64/2", "128.0/1"}
+	plog.Info("add route ", remoteIp, " via ", nm.defaultGateway)
+	nm.addRoute(remoteIp, nm.defaultGateway)
+
+	//routes := []string{"8.8.8.8/32"}
 
 	for _, route := range routes {
-		plog.Info("add route ", route, "via", ip1)
+		plog.Info("add route ", route, " via ", gateway)
 		nm.delRoute(route)
-		err = nm.addRoute(route, ip1)
+		err = nm.addRoute(route, gateway)
 		if err != nil {
 			return errors.New("add route fail," + err.Error())
 		}
@@ -152,6 +176,7 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, ip1 string, dns string
 func (nm *DarwinNetworkManager) RestoreNetwork() {
 
 	plog.Infof("restore network service %v", nm.netservice)
+	nm.delRoute(nm.remoteIp)
 	nm.removeDnsServer(nm.netservice)
 	if nm.sysdns != "" {
 		plog.Infof("set service %v dns to %v", nm.netservice, nm.sysdns)
