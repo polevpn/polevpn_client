@@ -136,6 +136,10 @@ github.com/polevpn/polevpn_core v1.0.8 h1:fRbMAwiiO5cfQyupk9SY4eT5XMcHDfr1Y2/1f0
 github.com/polevpn/polevpn_core v1.0.8/go.mod h1:Xl2CnwjcrAd4R7M7KoC7FDetvIOl8FPL+0Bbu/kjCoc=
 github.com/polevpn/polevpn_core v1.0.9 h1:ywB50FyESLEUY1E1nw7jWo63L5fpQqlnpC4Iuy6VQnw=
 github.com/polevpn/polevpn_core v1.0.9/go.mod h1:dMaCy1PeiuJNT7s7CFEhH2CIDG5WzcweQRdBUF0TKJ8=
+github.com/polevpn/polevpn_core v1.0.10 h1:wyMC04qB9p4VI/E/pyOOn9MQuuAHl+JwPdrGFNFl6GE=
+github.com/polevpn/polevpn_core v1.0.10/go.mod h1:dMaCy1PeiuJNT7s7CFEhH2CIDG5WzcweQRdBUF0TKJ8=
+github.com/polevpn/polevpn_core v1.0.11 h1:kvSmJ1vsB0LtTb5OKjWCRGQBSTaiaortAGGB9awBUF4=
+github.com/polevpn/polevpn_core v1.0.11/go.mod h1:dMaCy1PeiuJNT7s7CFEhH2CIDG5WzcweQRdBUF0TKJ8=
 github.com/polevpn/water v1.0.1 h1:Qy9EauklrHwkUxL9Wy+lmjVH1l/x8VW7wLn0IW9DipY=
 github.com/polevpn/water v1.0.1/go.mod h1:L41gnrOhprREWmwx5yONXP3ABrQ8CJqXvgvD+6B1DsE=
 github.com/prometheus/client_golang v0.8.0/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=

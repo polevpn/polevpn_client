@@ -3,11 +3,15 @@ package main
 import (
 	"errors"
 	"os/exec"
+	"strings"
 )
 
 type LinuxNetworkManager struct {
-	sysdns     string
-	netservice string
+	sysdns         string
+	netservice     string
+	defaultGateway string
+	remoteIp       string
+	gateway        string
 }
 
 func NewLinuxNetworkManager() *LinuxNetworkManager {
@@ -33,19 +37,32 @@ func (nm *LinuxNetworkManager) setIPAddressAndEnable(tundev string, ip1 string) 
 	return nil
 }
 
-func (nm *LinuxNetworkManager) setDnsServer(ip string, service string) error {
+func (nm *LinuxNetworkManager) setDnsServer(ip string) error {
 
+	out, err := exec.Command("bash", "-c", `echo "nameserver `+ip+`" |tee /etc/resolv.conf`).Output()
+
+	if err != nil {
+		return errors.New(err.Error() + "," + string(out))
+	}
 	return nil
 }
 
-func (nm *LinuxNetworkManager) removeDnsServer(service string) error {
+func (nm *LinuxNetworkManager) restoreDnsServer() error {
 
+	out, err := exec.Command("bash", "-c", `systemctl restart systemd-resolved`).Output()
+
+	if err != nil {
+		return errors.New(err.Error() + "," + string(out))
+	}
 	return nil
 }
 
-func (nm *LinuxNetworkManager) getNetServiceeDns() (string, string, error) {
-
-	return "", "", errors.New("no net service have ip and dns")
+func (nm *LinuxNetworkManager) getDefaultGateway() (string, error) {
+	out, err := exec.Command("bash", "-c", `ip route |grep default|grep -Eo "([0-9]{1,3}[\.]){3}[0-9]{1,3}"`).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.Trim(string(out), " \n\r\t"), nil
 }
 
 func (nm *LinuxNetworkManager) addRoute(cidr string, gw string) error {
@@ -69,7 +86,15 @@ func (nm *LinuxNetworkManager) delRoute(cidr string) error {
 
 func (nm *LinuxNetworkManager) SetNetwork(device string, gateway string, remoteIp string, dns string, routes []string) error {
 
+	nm.gateway = gateway
+	nm.remoteIp = remoteIp
+
 	var err error
+
+	nm.defaultGateway, err = nm.getDefaultGateway()
+	if err != nil {
+		return err
+	}
 
 	plog.Infof("set tun device ip as %v", gateway)
 	err = nm.setIPAddressAndEnable(device, gateway)
@@ -77,8 +102,27 @@ func (nm *LinuxNetworkManager) SetNetwork(device string, gateway string, remoteI
 		return errors.New("set address fail," + err.Error())
 	}
 
+	if dns != "" {
+		plog.Infof("change network dns to %v", dns)
+		err = nm.setDnsServer(dns)
+	}
+
+	if err != nil {
+		return errors.New("set dns fail," + err.Error())
+	}
+
+	plog.Info("add route ", nm.remoteIp, " via ", nm.defaultGateway)
+	nm.delRoute(nm.remoteIp)
+	err = nm.addRoute(nm.remoteIp, nm.defaultGateway)
+
+	if err != nil {
+		return errors.New("add route fail," + err.Error())
+	}
+
+	//routes = []string{"8.8.8.8/32"}
+
 	for _, route := range routes {
-		plog.Info("add route ", route, "via", gateway)
+		plog.Info("add route ", route, " via ", gateway)
 		nm.delRoute(route)
 		err = nm.addRoute(route, gateway)
 		if err != nil {
@@ -90,15 +134,19 @@ func (nm *LinuxNetworkManager) SetNetwork(device string, gateway string, remoteI
 
 func (nm *LinuxNetworkManager) RefreshDefaultGateway() error {
 
-	return nil
+	var err error
+	nm.defaultGateway, err = nm.getDefaultGateway()
+	if err != nil {
+		return err
+	}
+
+	nm.delRoute(nm.remoteIp)
+
+	return nm.addRoute(nm.remoteIp, nm.defaultGateway)
 }
 
 func (nm *LinuxNetworkManager) RestoreNetwork() {
 
-	plog.Infof("restore network service %v", nm.netservice)
-	nm.removeDnsServer(nm.netservice)
-	if nm.sysdns != "" {
-		plog.Infof("set service %v dns to %v", nm.netservice, nm.sysdns)
-		nm.setDnsServer(nm.sysdns, nm.netservice)
-	}
+	plog.Infof("restore network service")
+	nm.restoreDnsServer()
 }

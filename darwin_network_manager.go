@@ -150,8 +150,10 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, gateway string, remote
 		return errors.New("get system dns server fail," + err.Error())
 	}
 
-	plog.Infof("change network service %v dns to %v", nm.netservice, dns)
-	err = nm.setDnsServer(dns, nm.netservice)
+	if dns != "" {
+		plog.Infof("change network service %v dns to %v", nm.netservice, dns)
+		err = nm.setDnsServer(dns, nm.netservice)
+	}
 
 	if err != nil {
 		return errors.New("set dns server fail," + err.Error())
@@ -184,9 +186,11 @@ func (nm *DarwinNetworkManager) RefreshDefaultGateway() error {
 	if err != nil {
 		return err
 	}
+
 	nm.delRoute(nm.remoteIp)
-	nm.addRoute(nm.remoteIp, nm.defaultGateway)
-	return nil
+
+	return nm.addRoute(nm.remoteIp, nm.defaultGateway)
+
 }
 
 func (nm *DarwinNetworkManager) RestoreNetwork() {

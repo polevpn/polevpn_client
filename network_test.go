@@ -16,3 +16,14 @@ func TestGetDefaultGateway(t *testing.T) {
 	gateway := strings.Replace(string(out), "gateway: ", "", -1)
 	t.Log(gateway)
 }
+
+func TestLinuxGetDefaultGateway(t *testing.T) {
+
+	out, err := exec.Command("bash", "-c", `ip route |grep default|grep -Eo "([0-9]{1,3}[\.]){3}[0-9]{1,3}"`).Output()
+	if err != nil {
+		t.Error(err)
+	}
+
+	gateway := string(out)
+	t.Log(gateway)
+}
