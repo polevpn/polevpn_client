@@ -158,7 +158,12 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, gateway string, remote
 	}
 
 	plog.Info("add route ", remoteIp, " via ", nm.defaultGateway)
-	nm.addRoute(remoteIp, nm.defaultGateway)
+	nm.delRoute(nm.remoteIp)
+	err = nm.addRoute(nm.remoteIp, nm.defaultGateway)
+
+	if err != nil {
+		return errors.New("add route fail," + err.Error())
+	}
 
 	//routes := []string{"8.8.8.8/32"}
 
@@ -170,6 +175,17 @@ func (nm *DarwinNetworkManager) SetNetwork(device string, gateway string, remote
 			return errors.New("add route fail," + err.Error())
 		}
 	}
+	return nil
+}
+
+func (nm *DarwinNetworkManager) RefreshDefaultGateway() error {
+	var err error
+	nm.defaultGateway, err = nm.getDefaultGateway()
+	if err != nil {
+		return err
+	}
+	nm.delRoute(nm.remoteIp)
+	nm.addRoute(nm.remoteIp, nm.defaultGateway)
 	return nil
 }
 

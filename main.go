@@ -73,6 +73,7 @@ func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) 
 	case core.CLIENT_EVENT_RECONNECTED:
 		plog.Info("client reconnected")
 	case core.CLIENT_EVENT_RECONNECTING:
+		networkmgr.RefreshDefaultGateway()
 		plog.Info("client reconnecting")
 	case core.CLIENT_EVENT_STARTED:
 		plog.Info("client started")

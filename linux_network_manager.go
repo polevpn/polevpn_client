@@ -88,6 +88,11 @@ func (nm *LinuxNetworkManager) SetNetwork(device string, gateway string, remoteI
 	return nil
 }
 
+func (nm *LinuxNetworkManager) RefreshDefaultGateway() error {
+
+	return nil
+}
+
 func (nm *LinuxNetworkManager) RestoreNetwork() {
 
 	plog.Infof("restore network service %v", nm.netservice)
