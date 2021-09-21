@@ -12,21 +12,14 @@ import (
 	core "github.com/polevpn/polevpn_core"
 )
 
-var endpoint string
-var user string
-var pwd string
-var sni string
-var verifySSL bool
 var plog *elog.EasyLogger
+var Config *anyvalue.AnyValue
+var configPath string
 
 func init() {
-	flag.StringVar(&endpoint, "e", "", "server connect to")
-	flag.StringVar(&user, "u", "", "login user")
-	flag.StringVar(&pwd, "p", "", "login password")
-	flag.StringVar(&sni, "s", "www.apple.com", "fake domain")
-	flag.BoolVar(&verifySSL, "v", false, "verify tls certificate")
-
+	flag.StringVar(&configPath, "config", "./config.json", "config file path")
 	plog = elog.GetLogger()
+
 }
 
 func signalHandler(pc *core.PoleVpnClient) {
@@ -59,7 +52,15 @@ func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) 
 	switch event {
 	case core.CLIENT_EVENT_ADDRESS_ALLOCED:
 		{
-			err := networkmgr.SetNetwork(device.GetInterface().Name(), av.Get("ip").AsStr(), client.GetRemoteIP(), av.Get("dns").AsStr(), av.Get("route").AsStrArr())
+			var routes []string
+			if Config.Get("use_remote_route").AsBool() {
+				routes = append(routes, av.Get("route").AsStrArr()...)
+			}
+			routes = append(routes, Config.Get("route_networks").AsStrArr()...)
+
+			elog.Info(routes)
+
+			err := networkmgr.SetNetwork(device.GetInterface().Name(), av.Get("ip").AsStr(), client.GetRemoteIP(), av.Get("dns").AsStr(), routes)
 			if err != nil {
 				plog.Error("set network fail,", err)
 				client.Stop()
@@ -89,6 +90,13 @@ func main() {
 
 	flag.Parse()
 	defer plog.Flush()
+	var err error
+
+	Config, err = GetConfig(configPath)
+
+	if err != nil {
+		elog.Fatal("load config fail", err)
+	}
 
 	if runtime.GOOS == "darwin" {
 		networkmgr = NewDarwinNetworkManager()
@@ -97,8 +105,6 @@ func main() {
 	} else {
 		plog.Fatal("os platform not support")
 	}
-
-	var err error
 
 	device, err = core.NewTunDevice()
 
@@ -115,7 +121,7 @@ func main() {
 	client.SetEventHandler(eventHandler)
 	client.AttachTunDevice(device)
 
-	err = client.Start(endpoint, user, pwd, sni, !verifySSL)
+	err = client.Start(Config.Get("endpoint").AsStr(), Config.Get("user").AsStr(), Config.Get("password").AsStr(), Config.Get("sni").AsStr(), Config.Get("skipVerifySSL").AsBool())
 	if err != nil {
 		plog.Fatal("start polevpn client fail,", err)
 	}

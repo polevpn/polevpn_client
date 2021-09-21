@@ -23,6 +23,12 @@ func (nm *LinuxNetworkManager) setIPAddressAndEnable(tundev string, ip1 string) 
 	var out []byte
 	var err error
 
+	out, err = exec.Command("bash", "-c", "ip addr flush dev "+tundev).Output()
+
+	if err != nil {
+		return errors.New(err.Error() + "," + string(out))
+	}
+
 	out, err = exec.Command("bash", "-c", "ip addr add dev "+tundev+" local "+ip1+" peer "+ip1).Output()
 
 	if err != nil {
