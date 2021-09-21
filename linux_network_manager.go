@@ -7,8 +7,6 @@ import (
 )
 
 type LinuxNetworkManager struct {
-	sysdns         string
-	netservice     string
 	defaultGateway string
 	remoteIp       string
 	gateway        string
