@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"net"
 	"os/exec"
 	"strings"
 	"testing"
@@ -26,4 +28,12 @@ func TestLinuxGetDefaultGateway(t *testing.T) {
 
 	gateway := string(out)
 	t.Log(gateway)
+}
+
+func TestCidr(t *testing.T) {
+	ip, network, err := net.ParseCIDR("10.9.3.254/31")
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(ip, network)
 }

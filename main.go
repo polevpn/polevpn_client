@@ -36,31 +36,38 @@ func signalHandler(pc *core.PoleVpnClient) {
 				}
 				plog.Flush()
 				os.Exit(0)
-			case syscall.SIGUSR1:
-			case syscall.SIGUSR2:
 			default:
 			}
 		}
 	}()
 }
 
-var device *core.TunDevice
 var networkmgr NetworkManager
+var device *core.TunDevice
 
 func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
 
 	switch event {
 	case core.CLIENT_EVENT_ADDRESS_ALLOCED:
 		{
+			var err error
 			var routes []string
 			if Config.Get("use_remote_route").AsBool() {
 				routes = append(routes, av.Get("route").AsStrArr()...)
 			}
 			routes = append(routes, Config.Get("route_networks").AsStrArr()...)
 
-			elog.Info(routes)
+			elog.Info("route=", routes, ",allocated ip=", av.Get("ip").AsStr(), ",dns=", av.Get("dns").AsStr())
 
-			err := networkmgr.SetNetwork(device.GetInterface().Name(), av.Get("ip").AsStr(), client.GetRemoteIP(), av.Get("dns").AsStr(), routes)
+			if runtime.GOOS == "windows" {
+				err = device.GetInterface().SetTunNetwork(av.Get("ip").AsStr() + "/30")
+				if err != nil {
+					plog.Error("set tun network fail,", err)
+					client.Stop()
+				}
+			}
+
+			err = networkmgr.SetNetwork(device.GetInterface().Name(), av.Get("ip").AsStr(), client.GetRemoteIP(), av.Get("dns").AsStr(), routes)
 			if err != nil {
 				plog.Error("set network fail,", err)
 				client.Stop()
@@ -74,14 +81,17 @@ func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) 
 	case core.CLIENT_EVENT_RECONNECTED:
 		plog.Info("client reconnected")
 	case core.CLIENT_EVENT_RECONNECTING:
-		networkmgr.RefreshDefaultGateway()
+		err := networkmgr.RefreshDefaultGateway()
+		if err != nil {
+			plog.Error("refresh default gateway fail,", err)
+		}
 		plog.Info("client reconnecting")
 	case core.CLIENT_EVENT_STARTED:
 		plog.Info("client started")
 	case core.CLIENT_EVENT_ERROR:
 		plog.Info("client error ", av.Get("error").AsStr())
 	default:
-		plog.Error("invalid evnet=", event)
+		plog.Error("invalid event=", event)
 	}
 
 }
@@ -98,18 +108,20 @@ func main() {
 		elog.Fatal("load config fail", err)
 	}
 
+	device, err = core.NewTunDevice()
+	if err != nil {
+		elog.Fatal("create device fail,", err)
+		return
+	}
+
 	if runtime.GOOS == "darwin" {
 		networkmgr = NewDarwinNetworkManager()
 	} else if runtime.GOOS == "linux" {
 		networkmgr = NewLinuxNetworkManager()
+	} else if runtime.GOOS == "windows" {
+		networkmgr = NewWindowsNetworkManager()
 	} else {
 		plog.Fatal("os platform not support")
-	}
-
-	device, err = core.NewTunDevice()
-
-	if err != nil {
-		plog.Fatal("create device fail,", err)
 	}
 
 	client, err := core.NewPoleVpnClient()

@@ -152,5 +152,6 @@ func (nm *LinuxNetworkManager) RefreshDefaultGateway() error {
 func (nm *LinuxNetworkManager) RestoreNetwork() {
 
 	plog.Infof("restore network service")
+	nm.delRoute(nm.remoteIp)
 	nm.restoreDnsServer()
 }
