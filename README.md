@@ -1,7 +1,6 @@
 # poleclient
 
 ## config 
-
 ```
 {
     "endpoint":"quic://127.0.0.2/h3",
@@ -14,3 +13,6 @@
     "route_networks":["10.8.0.0/16","192.168.10.0/24"]
 }
 ```
+
+## windows client allow inbound traffic
+* Windows Firewall-> Enable or Disable -> Disable Firewall (or configure firewall rules)

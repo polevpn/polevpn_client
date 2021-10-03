@@ -75,6 +75,9 @@ func (nm *WindowsNetworkManager) getInfNameByIP(ip string) (string, error) {
 			return "", err
 		}
 		addresses, err := byName.Addrs()
+		if err != nil {
+			return "", err
+		}
 		for _, v := range addresses {
 			ip1, _, err := net.ParseCIDR(v.String())
 			if err != nil {
@@ -89,7 +92,7 @@ func (nm *WindowsNetworkManager) getInfNameByIP(ip string) (string, error) {
 }
 
 func (nm *WindowsNetworkManager) addRoute(cidr string, gw string, ifce string) error {
-	cmd := "netsh interface ip add route prefix=" + cidr + " interface=" + ifce + " store=active nexthop=" + gw
+	cmd := "netsh interface ip add route prefix=" + cidr + " interface=\"" + ifce + "\" store=active nexthop=" + gw
 	args := strings.Split(cmd, " ")
 	out, err := exec.Command(args[0], args[1:]...).Output()
 	if err != nil {
