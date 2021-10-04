@@ -42,7 +42,7 @@ func signalHandler(pc *core.PoleVpnClient) {
 	}()
 }
 
-var networkmgr NetworkManager
+var networkmgr core.NetworkManager
 var device *core.TunDevice
 
 func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
@@ -115,11 +115,11 @@ func main() {
 	}
 
 	if runtime.GOOS == "darwin" {
-		networkmgr = NewDarwinNetworkManager()
+		networkmgr = core.NewDarwinNetworkManager()
 	} else if runtime.GOOS == "linux" {
-		networkmgr = NewLinuxNetworkManager()
+		networkmgr = core.NewLinuxNetworkManager()
 	} else if runtime.GOOS == "windows" {
-		networkmgr = NewWindowsNetworkManager()
+		networkmgr = core.NewWindowsNetworkManager()
 	} else {
 		plog.Fatal("os platform not support")
 	}
