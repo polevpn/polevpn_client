@@ -1,0 +1,10 @@
+{
+    "endpoint":"dtls://127.0.0.1:8443",
+    "skipVerifySSL":true,
+    "user":"xxxxxxxx",
+    "password":"1234",
+    "acls":["0.0.0.0/0"],
+    "sni":"www.apple.com",
+    "use_remote_route":false,
+    "route_networks":["10.9.0.0/16"]
+}
