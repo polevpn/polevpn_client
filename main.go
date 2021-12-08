@@ -55,7 +55,15 @@ func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) 
 			if Config.Get("use_remote_route").AsBool() {
 				routes = append(routes, av.Get("route").AsStrArr()...)
 			}
-			routes = append(routes, Config.Get("route_networks").AsStrArr()...)
+
+			if len(Config.Get("route_networks").AsStrArr()) > 0 {
+				routes = append(routes, Config.Get("route_networks").AsStrArr()...)
+			}
+
+			if len(Config.Get("proxy_domains").AsStrArr()) > 0 {
+				ips := GetRouteIpsFromDomain(Config.Get("proxy_domains").AsStrArr())
+				routes = append(routes, ips...)
+			}
 
 			elog.Info("route=", routes, ",allocated ip=", av.Get("ip").AsStr(), ",dns=", av.Get("dns").AsStr())
 

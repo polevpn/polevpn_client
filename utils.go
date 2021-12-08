@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/polevpn/anyvalue"
 )
@@ -31,4 +32,22 @@ func GetConfig(configfile string) (*anyvalue.AnyValue, error) {
 		return nil, err
 	}
 	return anyvalue.NewFromJsonReader(f)
+}
+
+func GetRouteIpsFromDomain(domains []string) []string {
+
+	ips := make([]string, 0)
+	for _, domain := range domains {
+
+		netips, err := net.LookupIP(domain)
+		if err != nil {
+			continue
+		}
+		for _, netip := range netips {
+			if !strings.Contains(netip.String(), ":") {
+				ips = append(ips, netip.String())
+			}
+		}
+	}
+	return ips
 }

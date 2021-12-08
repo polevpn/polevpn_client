@@ -3,8 +3,8 @@
     "skipVerifySSL":true,
     "user":"xxxxxxxx",
     "password":"1234",
-    "acls":["0.0.0.0/0"],
     "sni":"www.apple.com",
     "use_remote_route":false,
-    "route_networks":["10.9.0.0/16"]
+    "route_networks":["10.9.0.0/16"],
+    "proxy_domains":[]
 }
