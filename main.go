@@ -75,6 +75,10 @@ func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) 
 				}
 			}
 
+			if !Config.Get("use_remote_dns").AsBool() {
+				av.Set("dns", "")
+			}
+
 			err = networkmgr.SetNetwork(device.GetInterface().Name(), av.Get("ip").AsStr(), client.GetRemoteIP(), av.Get("dns").AsStr(), routes)
 			if err != nil {
 				plog.Error("set network fail,", err)

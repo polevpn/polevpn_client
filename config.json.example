@@ -1,10 +1,11 @@
 {
-    "endpoint":"dtls://127.0.0.1:8443",
+    "endpoint":"wss://127.0.0.1:8443",
     "skipVerifySSL":true,
     "user":"xxxxxxxx",
     "password":"1234",
     "sni":"www.apple.com",
     "use_remote_route":false,
+    "use_remote_dns":false,
     "route_networks":["10.9.0.0/16"],
     "proxy_domains":[]
 }
