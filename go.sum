@@ -143,6 +143,8 @@ github.com/polevpn/polevpn_core v1.2.9 h1:p/jqPLth1FEKZctGbj7VIM1J1I1XM/7nrBL8zK
 github.com/polevpn/polevpn_core v1.2.9/go.mod h1:6Bu9d7xrKoYmpqOxlEhqg+Qkc5/lASloQxcTi+K1qvc=
 github.com/polevpn/polevpn_core v1.2.10 h1:nUNv7oNuEeYdydosU9ZPFbUwq0wHFRnQlKfLykwdVvI=
 github.com/polevpn/polevpn_core v1.2.10/go.mod h1:yX8SFmDGIQE1cKBfaOO46BX97GQN0tP3am0Dq1NvJGk=
+github.com/polevpn/polevpn_core v1.2.12 h1:i3tE9HB7WZYKt5R5sWLcDp2a79q0Wvl36AJWq8t2BXU=
+github.com/polevpn/polevpn_core v1.2.12/go.mod h1:yX8SFmDGIQE1cKBfaOO46BX97GQN0tP3am0Dq1NvJGk=
 github.com/polevpn/water v1.0.4 h1:OCLCeKgdQwlh4J5GjR7zzsd8u+tJ/EN8XAZQ931V6PI=
 github.com/polevpn/water v1.0.4/go.mod h1:mc/yhflKH5xQ9HKP8e4Qra21Qoh2I1DXvu1vE0mGGkM=
 github.com/prometheus/client_golang v0.8.0/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
