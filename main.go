@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"github.com/polevpn/anyvalue"
@@ -22,7 +23,7 @@ func init() {
 
 }
 
-func signalHandler(pc *core.PoleVpnClient) {
+func signalHandler(pc core.PoleVpnClient) {
 
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -45,7 +46,7 @@ func signalHandler(pc *core.PoleVpnClient) {
 var networkmgr core.NetworkManager
 var device *core.TunDevice
 
-func eventHandler(event int, client *core.PoleVpnClient, av *anyvalue.AnyValue) {
+func eventHandler(event int, client core.PoleVpnClient, av *anyvalue.AnyValue) {
 
 	switch event {
 	case core.CLIENT_EVENT_ADDRESS_ALLOCED:
@@ -117,12 +118,12 @@ func main() {
 	Config, err = GetConfig(configPath)
 
 	if err != nil {
-		elog.Fatal("load config fail", err)
+		plog.Fatal("load config fail", err)
 	}
 
 	device, err = core.NewTunDevice()
 	if err != nil {
-		elog.Fatal("create device fail,", err)
+		plog.Fatal("create device fail,", err)
 		return
 	}
 
@@ -136,16 +137,27 @@ func main() {
 		plog.Fatal("os platform not support")
 	}
 
-	client, err := core.NewPoleVpnClient()
+	var client core.PoleVpnClient
 
-	if err != nil {
-		plog.Fatal("new polevpn client fail,", err)
+	if strings.HasPrefix(Config.Get("endpoint").AsStr(), "proxy://") {
+		client, err = core.NewPoleVpnClientProxy()
+
+		if err != nil {
+			plog.Fatal("new polevpn client fail,", err)
+		}
+
+	} else {
+		client, err = core.NewPoleVpnClientVLAN()
+
+		if err != nil {
+			plog.Fatal("new polevpn client fail,", err)
+		}
 	}
 
 	client.SetEventHandler(eventHandler)
 	client.AttachTunDevice(device)
 
-	err = client.Start(Config.Get("endpoint").AsStr(), Config.Get("user").AsStr(), Config.Get("password").AsStr(), Config.Get("sni").AsStr(), Config.Get("skipVerifySSL").AsBool())
+	err = client.Start(Config.Get("endpoint").AsStr(), Config.Get("user").AsStr(), Config.Get("password").AsStr(), Config.Get("sni").AsStr(), Config.Get("skipVerifySSL").AsBool(), "cmd_client", "fdcc265a-030e-4559-b1d6-92d0ba9e1a5d")
 	if err != nil {
 		plog.Fatal("start polevpn client fail,", err)
 	}
