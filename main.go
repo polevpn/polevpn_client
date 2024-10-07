@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"flag"
 	"os"
 	"os/signal"
@@ -8,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/denisbrodbeck/machineid"
 	"github.com/polevpn/anyvalue"
 	"github.com/polevpn/elog"
 	core "github.com/polevpn/polevpn_core"
@@ -109,6 +112,19 @@ func eventHandler(event int, client core.PoleVpnClient, av *anyvalue.AnyValue) {
 
 }
 
+func GetDeviceId() string {
+	id, err := machineid.ID()
+	if err != nil {
+		return "11111111111111111111111111111111"
+	}
+
+	h := md5.New()
+	h.Write([]byte(id))
+	result := hex.EncodeToString(h.Sum(nil))
+
+	return result
+}
+
 func main() {
 
 	flag.Parse()
@@ -157,7 +173,7 @@ func main() {
 	client.SetEventHandler(eventHandler)
 	client.AttachTunDevice(device)
 
-	err = client.Start(Config.Get("endpoint").AsStr(), Config.Get("user").AsStr(), Config.Get("password").AsStr(), Config.Get("sni").AsStr(), Config.Get("skipVerifySSL").AsBool(), "cmd_client", "fdcc265a-030e-4559-b1d6-92d0ba9e1a5d")
+	err = client.Start(Config.Get("endpoint").AsStr(), Config.Get("user").AsStr(), Config.Get("password").AsStr(), Config.Get("sni").AsStr(), Config.Get("skipVerifySSL").AsBool(), "LinuxCmd", GetDeviceId())
 	if err != nil {
 		plog.Fatal("start polevpn client fail,", err)
 	}

@@ -4,6 +4,8 @@ github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMn
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/denisbrodbeck/machineid v1.0.1 h1:geKr9qtkB876mXguW2X6TU4ZynleN6ezuMSRhl4D7AQ=
+github.com/denisbrodbeck/machineid v1.0.1/go.mod h1:dJUwb7PTidGDeYyUBmXZ2GphQBbjJCrnectwCyxcUSI=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
@@ -36,12 +38,12 @@ github.com/polevpn/anyvalue v1.0.6 h1:IaAtj0ZkOfAqTd1K8rc5JvDt/qFsuivzrI4LXrYC4i
 github.com/polevpn/anyvalue v1.0.6/go.mod h1:SAmPKOT6BtaGar2NZc9u/TUZgDYBXO7lZZ9q1MU0LVk=
 github.com/polevpn/elog v1.1.1 h1:+Nnyaajv//fbmVextCGrcFfZXi+isprA1qQag2dcwhE=
 github.com/polevpn/elog v1.1.1/go.mod h1:u30sJGFE2hYV+KuEmE4Bw7Qh0J3eXS3AEXjyHtqPDjU=
-github.com/polevpn/h3conn v1.0.17 h1:EHjMVNym/n5fMJmeHkY/PCpfvrmNHJOIoblBDJ/ku+4=
-github.com/polevpn/h3conn v1.0.17/go.mod h1:Xe6Vhr5J/jd1/cbyyVUh5VrJ3fK5VRfyYL8QEg7O24s=
+github.com/polevpn/h3conn v1.0.19 h1:bfzaYotOMfHl7hJ7wlGO7HqgJCx+PGTCyRu2TZsgKoU=
+github.com/polevpn/h3conn v1.0.19/go.mod h1:Xe6Vhr5J/jd1/cbyyVUh5VrJ3fK5VRfyYL8QEg7O24s=
 github.com/polevpn/netstack v1.10.12 h1:IEZn6ddntOvV1xu8fbAIp4hRy+9x3UH/eCoKLVRciYA=
 github.com/polevpn/netstack v1.10.12/go.mod h1:2C2dP1yP9Jyu2XqHhPV0AxA9F1IbdZI1QpX8wdXAMGU=
-github.com/polevpn/polevpn_core v1.2.24 h1:hjNLJzEBxCadXpzQLCEw1Jowyng9gDu6JjmH/dsGKe0=
-github.com/polevpn/polevpn_core v1.2.24/go.mod h1:2gnY71FH5g82fdAy1p7IEJxWduDDe3OIFRnqJ08lZX8=
+github.com/polevpn/polevpn_core v1.2.27 h1:kypbFK3qsBVALjO5BM8uSCF0vwg3DrqJl8s3QXYWcag=
+github.com/polevpn/polevpn_core v1.2.27/go.mod h1:3L8+oBz1N7tLqab19cULMhdFFdyOxUcg+723c37vqDY=
 github.com/polevpn/water v1.0.4 h1:OCLCeKgdQwlh4J5GjR7zzsd8u+tJ/EN8XAZQ931V6PI=
 github.com/polevpn/water v1.0.4/go.mod h1:mc/yhflKH5xQ9HKP8e4Qra21Qoh2I1DXvu1vE0mGGkM=
 github.com/quic-go/qpack v0.5.1 h1:giqksBPnT/HDtZ6VhtFKgoLOWmlyo9Ei6u9PqzIMbhI=

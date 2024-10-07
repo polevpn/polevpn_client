@@ -7,16 +7,17 @@ toolchain go1.23.1
 require (
 	github.com/polevpn/anyvalue v1.0.6
 	github.com/polevpn/elog v1.1.1
-	github.com/polevpn/polevpn_core v1.2.25
+	github.com/polevpn/polevpn_core v1.2.27
 )
 
 require (
+	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/google/btree v1.0.0 // indirect
 	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
-	github.com/polevpn/h3conn v1.0.17 // indirect
+	github.com/polevpn/h3conn v1.0.19 // indirect
 	github.com/polevpn/netstack v1.10.12 // indirect
 	github.com/polevpn/water v1.0.4 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
