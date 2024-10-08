@@ -42,8 +42,8 @@ github.com/polevpn/h3conn v1.0.19 h1:bfzaYotOMfHl7hJ7wlGO7HqgJCx+PGTCyRu2TZsgKoU
 github.com/polevpn/h3conn v1.0.19/go.mod h1:Xe6Vhr5J/jd1/cbyyVUh5VrJ3fK5VRfyYL8QEg7O24s=
 github.com/polevpn/netstack v1.10.12 h1:IEZn6ddntOvV1xu8fbAIp4hRy+9x3UH/eCoKLVRciYA=
 github.com/polevpn/netstack v1.10.12/go.mod h1:2C2dP1yP9Jyu2XqHhPV0AxA9F1IbdZI1QpX8wdXAMGU=
-github.com/polevpn/polevpn_core v1.2.27 h1:kypbFK3qsBVALjO5BM8uSCF0vwg3DrqJl8s3QXYWcag=
-github.com/polevpn/polevpn_core v1.2.27/go.mod h1:3L8+oBz1N7tLqab19cULMhdFFdyOxUcg+723c37vqDY=
+github.com/polevpn/polevpn_core v1.2.28 h1:7V0s0gNBJMkak7UQERXarem2VCblmzi3pBthI+FHtSI=
+github.com/polevpn/polevpn_core v1.2.28/go.mod h1:3L8+oBz1N7tLqab19cULMhdFFdyOxUcg+723c37vqDY=
 github.com/polevpn/water v1.0.4 h1:OCLCeKgdQwlh4J5GjR7zzsd8u+tJ/EN8XAZQ931V6PI=
 github.com/polevpn/water v1.0.4/go.mod h1:mc/yhflKH5xQ9HKP8e4Qra21Qoh2I1DXvu1vE0mGGkM=
 github.com/quic-go/qpack v0.5.1 h1:giqksBPnT/HDtZ6VhtFKgoLOWmlyo9Ei6u9PqzIMbhI=
