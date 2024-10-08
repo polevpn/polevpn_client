@@ -38,12 +38,12 @@ github.com/polevpn/anyvalue v1.0.6 h1:IaAtj0ZkOfAqTd1K8rc5JvDt/qFsuivzrI4LXrYC4i
 github.com/polevpn/anyvalue v1.0.6/go.mod h1:SAmPKOT6BtaGar2NZc9u/TUZgDYBXO7lZZ9q1MU0LVk=
 github.com/polevpn/elog v1.1.1 h1:+Nnyaajv//fbmVextCGrcFfZXi+isprA1qQag2dcwhE=
 github.com/polevpn/elog v1.1.1/go.mod h1:u30sJGFE2hYV+KuEmE4Bw7Qh0J3eXS3AEXjyHtqPDjU=
-github.com/polevpn/h3conn v1.0.19 h1:bfzaYotOMfHl7hJ7wlGO7HqgJCx+PGTCyRu2TZsgKoU=
-github.com/polevpn/h3conn v1.0.19/go.mod h1:Xe6Vhr5J/jd1/cbyyVUh5VrJ3fK5VRfyYL8QEg7O24s=
+github.com/polevpn/h3conn v1.0.20 h1:3aP9P4MXuo5Tzws3y36ldsmku15uSpggjez5arAAQ3k=
+github.com/polevpn/h3conn v1.0.20/go.mod h1:Xe6Vhr5J/jd1/cbyyVUh5VrJ3fK5VRfyYL8QEg7O24s=
 github.com/polevpn/netstack v1.10.12 h1:IEZn6ddntOvV1xu8fbAIp4hRy+9x3UH/eCoKLVRciYA=
 github.com/polevpn/netstack v1.10.12/go.mod h1:2C2dP1yP9Jyu2XqHhPV0AxA9F1IbdZI1QpX8wdXAMGU=
-github.com/polevpn/polevpn_core v1.2.28 h1:7V0s0gNBJMkak7UQERXarem2VCblmzi3pBthI+FHtSI=
-github.com/polevpn/polevpn_core v1.2.28/go.mod h1:3L8+oBz1N7tLqab19cULMhdFFdyOxUcg+723c37vqDY=
+github.com/polevpn/polevpn_core v1.2.29 h1:CotlB7P9AhGuAe13VSRJXgCBP5msHhnErcpT111z8bc=
+github.com/polevpn/polevpn_core v1.2.29/go.mod h1:NIHpR+C8nrP8o3doJK7UvAZ6PTWHn3/ysg3yMWAgI/k=
 github.com/polevpn/water v1.0.4 h1:OCLCeKgdQwlh4J5GjR7zzsd8u+tJ/EN8XAZQ931V6PI=
 github.com/polevpn/water v1.0.4/go.mod h1:mc/yhflKH5xQ9HKP8e4Qra21Qoh2I1DXvu1vE0mGGkM=
 github.com/quic-go/qpack v0.5.1 h1:giqksBPnT/HDtZ6VhtFKgoLOWmlyo9Ei6u9PqzIMbhI=
