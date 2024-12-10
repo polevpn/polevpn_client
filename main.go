@@ -86,7 +86,7 @@ func eventHandler(event int, client core.PoleVpnClient, av *anyvalue.AnyValue) {
 			err = networkmgr.SetNetwork(device.GetInterface().Name(), av.Get("ip").AsStr(), client.GetRemoteIP(), av.Get("dns").AsStr(), routes)
 			if err != nil {
 				plog.Error("set network fail,", err)
-				client.Stop()
+				go client.Stop()
 			}
 		}
 	case core.CLIENT_EVENT_STOPPED:
@@ -172,6 +172,14 @@ func main() {
 
 	client.SetEventHandler(eventHandler)
 	client.AttachTunDevice(device)
+
+	localIP, err := networkmgr.GetLocalIP()
+
+	if err != nil {
+		plog.Fatal("get local ip fail,", err)
+	}
+
+	client.SetLocalIP(localIP)
 
 	err = client.Start(Config.Get("endpoint").AsStr(), Config.Get("user").AsStr(), Config.Get("password").AsStr(), Config.Get("sni").AsStr(), Config.Get("skipVerifySSL").AsBool(), "LinuxCmd", GetDeviceId())
 	if err != nil {
